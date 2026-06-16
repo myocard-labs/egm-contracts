@@ -17,9 +17,9 @@ def test_package_imports() -> None:
 
 def test_version_is_pep440() -> None:
     # Loose PEP 440 check — accepts X.Y.Z, X.Y.Z.devN, X.Y.ZrcN, etc.
-    assert re.match(
-        r"^\d+\.\d+\.\d+", myocard_egm_contracts.__version__
-    ), f"non-PEP440 version: {myocard_egm_contracts.__version__!r}"
+    assert re.match(r"^\d+\.\d+\.\d+", myocard_egm_contracts.__version__), (
+        f"non-PEP440 version: {myocard_egm_contracts.__version__!r}"
+    )
 
 
 def test_generated_models_are_present() -> None:

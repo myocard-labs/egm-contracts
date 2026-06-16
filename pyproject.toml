@@ -48,13 +48,13 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "datamodel-code-generator>=0.25",
-  "mypy>=1.10",
+  "datamodel-code-generator==0.64.0",
+  "mypy==2.1.0",
   "nbstripout>=0.7",
   "pre-commit>=3.7",
   "pytest>=8.0",
   "pytest-cov>=5.0",
-  "ruff>=0.6.0",
+  "ruff==0.15.17",
 ]
 
 [project.urls]
