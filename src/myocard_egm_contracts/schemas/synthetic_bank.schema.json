@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/synthetic_bank.schema.json",
+  "title": "SyntheticBank",
+  "description": "Synthetic intracardiac EGM bank (may include real-noise conditioning at the signal level). Schema version 1.0. Maps to an HDF5 file with bank-level root attrs plus a `traces/` group containing per-trace columns.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0"],
+      "description": "Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions."
+    },
+    "created_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp captured at write time."
+    },
+    "description": {
+      "type": "string",
+      "description": "Free-text human-readable description of this bank's intent (e.g., 'hybrid_v1 — 100 sims, 20 traces/sim, SNR 10-25 dB')."
+    },
+    "fs_hz": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Sampling rate in Hz. Phase 1 is 1000.0 to match IAFDB."
+    },
+    "trace_duration_ms": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Per-trace duration in milliseconds."
+    },
+    "simulator": {
+      "type": "string",
+      "default": "finitewave",
+      "description": "Simulator backend identifier. Phase 1 = 'finitewave'."
+    },
+    "cell_model": {
+      "type": "string",
+      "default": "aliev_panfilov",
+      "description": "Cellular electrophysiology model. Phase 1 = 'aliev_panfilov'."
+    },
+    "patch_size_mm": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Tissue patch side length in mm (square patch). Phase 1 = 40 mm."
+    },
+    "patch_dr_mm": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Spatial discretization step in mm. Phase 1 = 0.25 mm."
+    },
+    "ap_time_unit_ms": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Mapping from simulator's non-dimensional time to ms (Aliev-Panfilov-specific; 0 for fully dimensional simulators)."
+    },
+    "fibrosis_strategy_name": {
+      "type": "string",
+      "description": "Identifier for the fibrosis substrate generation strategy. Phase 1 = 'uniform_random'."
+    },
+    "fibrosis_params": {
+      "type": "object",
+      "description": "Parameters of the fibrosis strategy. Stored on HDF5 as a JSON-encoded string attr (`fibrosis_params_json`) since HDF5 attrs are flat. Schema models the decoded structure.",
+      "additionalProperties": true
+    },
+    "electrode_config": {
+      "type": "object",
+      "description": "Electrode grid configuration (grid shape, spacing, height range). Stored on HDF5 as JSON in `electrode_config_json`.",
+      "additionalProperties": true
+    },
+    "mixer_config": {
+      "type": "object",
+      "description": "Noise mixer configuration (target SNR range, band, on/off knob). Stored on HDF5 as JSON in `mixer_config_json`.",
+      "additionalProperties": true
+    },
+    "experiment_config": {
+      "type": "object",
+      "description": "Top-level experiment knobs that drove this bank's generation. Stored on HDF5 as JSON in `experiment_config_json`.",
+      "additionalProperties": true
+    },
+    "noise_bank_source": {
+      "type": "string",
+      "description": "Identifier of the IAFDB noise bank consumed by the mixer (e.g., 'iafdb_noise_v1.h5')."
+    },
+    "traces": {
+      "type": "object",
+      "description": "Per-trace columns. Maps to the HDF5 `traces/` group. All columns have first dimension N (the trace count) and are aligned.",
+      "properties": {
+        "signal": {
+          "type": "array",
+          "description": "(N, T) float32 — the bipolar EGM waveforms.",
+          "items": {
+            "type": "array",
+            "items": { "type": "number" }
+          },
+          "x-hdf5-dataset": { "name": "traces/signal", "dtype": "float32", "rank": 2, "compression": "gzip" }
+        },
+        "simulation_id": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "(N,) int64 — patient/simulation index (the patient-aware split unit).",
+          "x-hdf5-dataset": { "name": "traces/simulation_id", "dtype": "int64", "rank": 1 }
+        },
+        "pair_index": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "(N,) int64 — index of the bipolar electrode pair within the grid (0..n_pairs).",
+          "x-hdf5-dataset": { "name": "traces/pair_index", "dtype": "int64", "rank": 1 }
+        },
+        "electrode_row": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "(N,) int64 — row index within the 5x5 grid this pair belongs to.",
+          "x-hdf5-dataset": { "name": "traces/electrode_row", "dtype": "int64", "rank": 1 }
+        },
+        "fibrosis_density": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "(N,) float64 — requested fibrosis density (continuous label, 0.0 == healthy).",
+          "x-hdf5-dataset": { "name": "traces/fibrosis_density", "dtype": "float64", "rank": 1 }
+        },
+        "fibrosis_density_realized": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "(N,) float64 — actual fraction of non-conductive nodes after the substrate draw (differs from requested due to grid-size discretization).",
+          "x-hdf5-dataset": { "name": "traces/fibrosis_density_realized", "dtype": "float64", "rank": 1 }
+        },
+        "electrode_height_mm": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "(N,) float64 — height of this electrode pair above the tissue surface, in mm. Sampled uniformly per simulation from [0.2, 1.0] mm in Phase 1.",
+          "x-hdf5-dataset": { "name": "traces/electrode_height_mm", "dtype": "float64", "rank": 1 }
+        },
+        "seed": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "(N,) int64 — RNG seed used for this simulation (reproducibility).",
+          "x-hdf5-dataset": { "name": "traces/seed", "dtype": "int64", "rank": 1 }
+        },
+        "snr_db": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "(N,) float64 — target signal-to-noise ratio at which IAFDB noise was mixed in. NaN when mixer was off.",
+          "x-hdf5-dataset": { "name": "traces/snr_db", "dtype": "float64", "rank": 1 }
+        },
+        "stim_edge": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["top", "bottom", "left", "right"] },
+          "description": "(N,) UTF-8 — stimulation edge for the planar wave that produced this trace. Phase 1 only models planar-wave stim from a tissue edge; Phase 2 introduces point-source / S1-S2 protocols that will need a richer 'stimulation' object (type discriminator + protocol-specific params). When that schema version lands, this field is replaced (not extended); see project/known_issues.md for the migration plan.",
+          "x-hdf5-dataset": { "name": "traces/stim_edge", "dtype": "utf-8", "rank": 1 }
+        },
+        "noise_record": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "(N,) UTF-8 — IAFDB record name that supplied the noise segment ('' when mixer was off).",
+          "x-hdf5-dataset": { "name": "traces/noise_record", "dtype": "utf-8", "rank": 1 }
+        },
+        "noise_channel": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "(N,) UTF-8 — IAFDB channel name that supplied the noise segment ('' when mixer was off).",
+          "x-hdf5-dataset": { "name": "traces/noise_channel", "dtype": "utf-8", "rank": 1 }
+        }
+      },
+      "required": [
+        "signal",
+        "simulation_id",
+        "pair_index",
+        "electrode_row",
+        "fibrosis_density",
+        "fibrosis_density_realized",
+        "electrode_height_mm",
+        "seed",
+        "snr_db",
+        "stim_edge",
+        "noise_record",
+        "noise_channel"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "created_utc",
+    "fs_hz",
+    "trace_duration_ms",
+    "simulator",
+    "cell_model",
+    "fibrosis_strategy_name",
+    "traces"
+  ],
+  "additionalProperties": false,
+  "x-hdf5-mapping": {
+    "root_attrs": [
+      "schema_version", "created_utc", "description", "fs_hz", "trace_duration_ms",
+      "simulator", "cell_model", "patch_size_mm", "patch_dr_mm", "ap_time_unit_ms",
+      "fibrosis_strategy_name", "noise_bank_source"
+    ],
+    "root_attrs_json_encoded": [
+      { "schema_key": "fibrosis_params", "hdf5_attr": "fibrosis_params_json" },
+      { "schema_key": "electrode_config", "hdf5_attr": "electrode_config_json" },
+      { "schema_key": "mixer_config", "hdf5_attr": "mixer_config_json" },
+      { "schema_key": "experiment_config", "hdf5_attr": "experiment_config_json" }
+    ],
+    "traces_group": "traces"
+  }
+}

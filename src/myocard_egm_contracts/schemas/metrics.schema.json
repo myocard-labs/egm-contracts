@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/metrics.schema.json",
+  "title": "MetricsRow",
+  "description": "Flat per-epoch training metrics, one row per epoch in metrics.csv. Column order is the contract (consumers read by header name, but plot/spreadsheet defaults assume this order). The CSV writes empty cells for non-finite values; the JSON representation of a row treats those as null. Schema describes one row. Validity rule: epoch / lr / train_loss / val_loss / epoch_seconds are always present and finite — if a producer writes them as null/empty, that's a producer bug worth surfacing. Validation metrics (val_auroc / val_accuracy / etc.) are legitimately nullable: AUROC is undefined on a single-class val split, ECE is undefined when no reliability bin contains samples, etc.",
+  "type": "object",
+  "properties": {
+    "epoch": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1-based epoch number. Strictly increasing across the run."
+    },
+    "lr": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Learning rate at the epoch's last optimizer step. Required and finite — captures schedule behavior."
+    },
+    "train_loss": {
+      "type": "number",
+      "description": "Mean training-set loss across all batches in the epoch. Required and finite."
+    },
+    "val_loss": {
+      "type": "number",
+      "description": "Mean validation-set loss across all batches in the epoch. Required and finite. (Validation-set selection lives in the run config, not here.)"
+    },
+    "val_auroc": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Validation AUROC for the positive class. Null when AUROC is undefined (e.g., a single-class val split, or zero positives)."
+    },
+    "val_accuracy": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Validation accuracy at the configured decision threshold (typically 0.5). Null when the val set is empty."
+    },
+    "val_precision": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Validation precision = TP / (TP + FP). Null when TP + FP == 0 (no positives predicted)."
+    },
+    "val_recall": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Validation recall = TP / (TP + FN). Null when TP + FN == 0 (no actual positives in val set)."
+    },
+    "val_f1": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Validation F1 = harmonic mean of precision and recall. Null when either precision or recall is null."
+    },
+    "val_ece": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Expected Calibration Error: weighted average gap between predicted confidence and empirical accuracy across reliability bins. Lower is better-calibrated. Null when no reliability bin contains samples."
+    },
+    "epoch_seconds": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Wall-clock seconds spent on this epoch (training + validation). Required."
+    }
+  },
+  "required": ["epoch", "lr", "train_loss", "val_loss", "epoch_seconds"],
+  "additionalProperties": false,
+  "x-csv-column-order": [
+    "epoch", "lr", "train_loss", "val_loss", "val_auroc", "val_accuracy",
+    "val_precision", "val_recall", "val_f1", "val_ece", "epoch_seconds"
+  ]
+}

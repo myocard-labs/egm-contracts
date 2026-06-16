@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/run_record.schema.json",
+  "title": "RunRecord",
+  "description": "Versioned full-fidelity record of one training run, written to run.json. Schema version 1.0. All non-finite floats are emitted as null so the JSON stays strictly valid.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0"],
+      "description": "Versioned schema identifier in <package>.<format>/<major>.<minor> form. Consumers MUST refuse unknown major versions."
+    },
+    "created_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "run": {
+      "type": "object",
+      "description": "Run-level metadata. Well-known keys (producer SHOULD write all of these): 'run_id' (string, unique identifier), 'git_sha' (string, repo state at training time), 'host' (string, hostname where training ran), 'model_version' (string, model architecture version tag), 'training_started_utc' / 'training_ended_utc' (ISO date-times). Additional keys allowed for forward compatibility.",
+      "additionalProperties": true
+    },
+    "config": {
+      "type": "object",
+      "description": "The fully-resolved training configuration as a flat-ish nested dict. Well-known top-level keys: 'model' (architecture + hyperparameters), 'data' (bank paths, augmentation, split ratios), 'training' (optimizer, scheduler, epochs, batch size, loss), 'eval' (selection metric, decision threshold). The contents reflect whatever the producer's config system serializes; consumers should treat unknown keys as additional context rather than fail on them.",
+      "additionalProperties": true
+    },
+    "epochs": {
+      "type": "array",
+      "description": "Time series of per-epoch records, ordered by epoch number.",
+      "items": {
+        "$ref": "#/$defs/EpochRecord",
+        "description": "One epoch's record (loss / metrics / reliability for that epoch)."
+      }
+    },
+    "best": {
+      "type": "object",
+      "description": "Summary of the best epoch by the configured selection metric.",
+      "properties": {
+        "epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1-based epoch number that scored best by the selection metric."
+        },
+        "metric": {
+          "type": "string",
+          "description": "Metric used for selection (e.g. 'auroc', or 'neg_val_loss' as a fallback when the configured metric was non-finite on every epoch)."
+        },
+        "value": {
+          "type": ["number", "null"],
+          "description": "The metric value at the selected epoch. Null when the metric was undefined across every epoch."
+        }
+      },
+      "additionalProperties": false
+    },
+    "test": {
+      "type": "object",
+      "description": "Held-out test metrics, present iff a test split was evaluated.",
+      "properties": {
+        "loss": {
+          "type": ["number", "null"],
+          "description": "Mean test-set loss across batches. Null when the test split was empty."
+        },
+        "metrics": {
+          "type": "object",
+          "description": "Scalar test metrics (auroc, accuracy, precision, recall, f1, ece, ...). Keys are metric names; values are scalars or null when the metric was undefined.",
+          "additionalProperties": {
+            "type": ["number", "integer", "null"],
+            "description": "Scalar value for the named metric, or null when undefined."
+          }
+        },
+        "reliability": {
+          "type": "array",
+          "description": "Reliability bins computed on the test split (calibration-diagram input).",
+          "items": {
+            "$ref": "#/$defs/ReliabilityBin",
+            "description": "One bin of the reliability diagram for the test split."
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["schema_version", "created_utc", "run", "config", "epochs", "best"],
+  "additionalProperties": false,
+  "$defs": {
+    "EpochRecord": {
+      "type": "object",
+      "description": "Full per-epoch record: scalar losses, scalar metrics, calibration bins.",
+      "properties": {
+        "epoch": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "1-based epoch number, strictly increasing across the run."
+        },
+        "lr": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Learning rate at the epoch's last optimizer step."
+        },
+        "train_loss": {
+          "type": ["number", "null"],
+          "description": "Mean training-set loss across all batches in the epoch."
+        },
+        "val_loss": {
+          "type": ["number", "null"],
+          "description": "Mean validation-set loss across all batches in the epoch."
+        },
+        "epoch_seconds": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Wall-clock seconds spent on this epoch (training + validation)."
+        },
+        "val_metrics": {
+          "type": "object",
+          "description": "Scalar validation metrics for the epoch (auroc / accuracy / precision / recall / f1 / ece). Confusion-matrix counts may appear under a nested 'confusion' object with keys tp/fp/tn/fn. Additional producer-defined keys allowed.",
+          "additionalProperties": true
+        },
+        "val_reliability": {
+          "type": "array",
+          "description": "Validation-split reliability bins for the calibration diagram.",
+          "items": {
+            "$ref": "#/$defs/ReliabilityBin",
+            "description": "One bin of the validation reliability diagram for this epoch."
+          }
+        }
+      },
+      "required": ["epoch", "lr", "train_loss", "val_loss", "epoch_seconds", "val_metrics", "val_reliability"],
+      "additionalProperties": false
+    },
+    "ReliabilityBin": {
+      "type": "object",
+      "description": "One reliability-diagram bin (calibration analysis).",
+      "properties": {
+        "lo": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Lower edge of the predicted-probability bin (in [0, 1])."
+        },
+        "hi": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Upper edge of the predicted-probability bin (in [0, 1])."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of samples whose predicted probability for the positive class fell in (lo, hi]."
+        },
+        "confidence": {
+          "type": ["number", "null"],
+          "description": "Mean predicted probability across the bin (null if count == 0)."
+        },
+        "accuracy": {
+          "type": ["number", "null"],
+          "description": "Empirical accuracy across the bin (null if count == 0). For a well-calibrated model, accuracy ≈ confidence in every bin."
+        }
+      },
+      "required": ["lo", "hi", "count", "confidence", "accuracy"],
+      "additionalProperties": false
+    }
+  }
+}

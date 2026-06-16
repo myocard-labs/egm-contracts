@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/model_metadata.schema.json",
+  "title": "ModelMetadata",
+  "description": "Preprocessing + inference-time constants paired with a deployed model artifact (typically the ONNX file). Captures everything the runtime needs that is NOT encoded in the ONNX graph itself: expected sample rate, expected trace length, per-channel normalization, decision threshold, model artifact hash, training provenance. Cross-language: consumed by Python (training-eval parity) and C++ (TensorRT inference). Schema version 1.0.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0"],
+      "description": "Versioned schema identifier. Consumers MUST refuse unknown major versions."
+    },
+    "created_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp at export time."
+    },
+    "model_artifact": {
+      "type": "object",
+      "description": "Reference to the model file this metadata pairs with. Lives next to the artifact on disk (e.g., 'best.onnx' + 'best.model_metadata.json').",
+      "properties": {
+        "filename": {
+          "type": "string",
+          "description": "Filename relative to this metadata file (e.g., 'best.onnx', 'engine.plan'). Resolver joins this with the directory of the metadata file."
+        },
+        "framework": {
+          "type": "string",
+          "enum": ["onnx", "tensorrt", "pytorch"],
+          "description": "Artifact format. ONNX is the portable form; TensorRT is the deployment-platform-specific engine; PyTorch is the checkpoint format used during training."
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "Content hash of the artifact for tamper detection. Optional but strongly recommended for deployed models."
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Artifact size in bytes. Optional; primarily for sanity-checking against the on-disk file."
+        }
+      },
+      "required": ["filename", "framework"],
+      "additionalProperties": false
+    },
+    "input": {
+      "type": "object",
+      "description": "Expected input tensor spec. The ONNX graph itself encodes shape; this section is the deployment-time documentation of what the model assumes, used for sanity-checking incoming data before dispatch.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "ONNX input tensor name (e.g., 'signal'). Matches the ONNX graph's input."
+        },
+        "shape": {
+          "type": "array",
+          "items": {
+            "type": ["integer", "string"],
+            "description": "One dimension of the input tensor. Integer for a fixed size, or the string '?' for a dynamic (typically batch) dimension."
+          },
+          "description": "Tensor shape. Integer for fixed dims, '?' (string) for dynamic dims (typically the batch axis). Example for a 1D 1-channel single-trace model: ['?', 1, 512]."
+        },
+        "dtype": {
+          "$ref": "#/$defs/Dtype",
+          "description": "Input element dtype."
+        }
+      },
+      "required": ["name", "shape", "dtype"],
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object",
+      "description": "Expected output tensor spec.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "ONNX output tensor name (e.g., 'logit')."
+        },
+        "shape": {
+          "type": "array",
+          "items": { "type": ["integer", "string"] },
+          "description": "Output tensor shape. Example for a single-logit binary classifier: ['?', 1]."
+        },
+        "dtype": {
+          "$ref": "#/$defs/Dtype",
+          "description": "Output element dtype."
+        },
+        "semantics": {
+          "type": "string",
+          "enum": ["binary_logit", "binary_probability", "multiclass_logits", "multiclass_probabilities"],
+          "description": "What the output value means. 'binary_logit' means apply sigmoid to get P(positive); 'binary_probability' means the value is already sigmoid-applied. Multi-class variants are equivalent for softmax/log-softmax outputs."
+        }
+      },
+      "required": ["name", "shape", "dtype", "semantics"],
+      "additionalProperties": false
+    },
+    "preprocessing": {
+      "type": "object",
+      "description": "Signal-conditioning constants the runtime applies before inference, in the order listed here. Must match the preprocessing used during training; mismatch will silently degrade performance.",
+      "properties": {
+        "expected_fs_hz": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Sampling rate the model was trained at (Hz). Inference inputs at a different rate must be resampled before invocation."
+        },
+        "expected_trace_samples": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Per-trace length in samples the model expects. Must match the time-axis dimension in input.shape."
+        },
+        "bandpass_hz": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "A band-edge frequency in Hz. The two-element array is [low, high]; both must be positive."
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Band-pass filter edges in Hz [low, high] applied at inference. Should match the bank's band_hz."
+        },
+        "normalization": {
+          "type": "object",
+          "description": "Per-channel signal normalization. For a 1-channel bipolar model the arrays are length 1. The scheme determines which fields are required: 'zscore' needs mean+std; 'minmax' would need min+max (add in a future schema version); 'none' needs neither.",
+          "properties": {
+            "scheme": {
+              "type": "string",
+              "enum": ["zscore", "minmax", "none"],
+              "description": "Normalization scheme."
+            },
+            "mean": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "description": "Per-channel mean value applied as the centering constant during normalization."
+              },
+              "description": "Per-channel mean (required for 'zscore'). Length must equal the input channel count."
+            },
+            "std": {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Per-channel standard deviation applied as the scaling divisor during normalization. Must be strictly positive."
+              },
+              "description": "Per-channel standard deviation (required for 'zscore'). Length must equal the input channel count."
+            }
+          },
+          "required": ["scheme"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["expected_fs_hz", "expected_trace_samples", "bandpass_hz", "normalization"],
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "description": "Decision-rule constants applied to the model output to produce a class label.",
+      "properties": {
+        "threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Decision threshold applied to P(fibrotic). 0.5 unless calibration analysis recommends otherwise. For multi-class models this is the threshold for the positive class; multi-class extension may add per-class thresholds in a future schema version."
+        },
+        "class_labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "A human-readable class name. Position in the array matches the model output index."
+          },
+          "description": "Human-readable class labels in the order matching the model's output index. For binary: ['healthy', 'fibrotic'] (index 0 = healthy, index 1 = fibrotic).",
+          "minItems": 2
+        }
+      },
+      "required": ["threshold", "class_labels"],
+      "additionalProperties": false
+    },
+    "training_provenance": {
+      "type": "object",
+      "description": "Where this model came from. Well-known keys: 'run_id' (identifier into the run.json that documents the training), 'run_json_path' (path to the run.json), 'training_bank_path' (path to the synthetic bank used for training), 'training_bank_schema_version' (the synthetic_bank schema version this bank conforms to, e.g. '1.0'), 'git_sha' (source repo state at training time). Additional keys are allowed for producer-specific provenance.",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "schema_version", "created_utc", "model_artifact", "input", "output",
+    "preprocessing", "decision", "training_provenance"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "Dtype": {
+      "type": "string",
+      "enum": ["float32", "float16"],
+      "description": "Floating-point element dtype. Used for both input and output tensors."
+    }
+  }
+}

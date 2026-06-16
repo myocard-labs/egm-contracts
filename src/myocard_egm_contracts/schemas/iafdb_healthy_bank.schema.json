@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/iafdb_healthy_bank.schema.json",
+  "title": "IafdbHealthyBank",
+  "description": "Calibrated + band-pass-filtered healthy bipolar EGM segments extracted from PhysioNet IAFDB. Schema version 1.0. Symmetric with SyntheticBank: maps to an HDF5 file with bank-level root attrs plus a `traces/` group containing per-trace columns. All segments are label==0 (healthy).",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0"],
+      "description": "Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions."
+    },
+    "created_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp captured at write time."
+    },
+    "source": {
+      "type": "string",
+      "enum": ["iafdb v1.0.0"],
+      "description": "Provenance tag identifying the upstream dataset. Bumps when the underlying PhysioNet dataset version changes."
+    },
+    "fs_hz": {
+      "type": "number",
+      "enum": [1000.0],
+      "exclusiveMinimum": 0,
+      "description": "Sampling rate in Hz. IAFDB is fixed at 1 kHz; enum (rather than const) so datamodel-code-generator emits a Literal[1000.0] in Pydantic and a concrete typed enum in C++. The exclusiveMinimum belt-and-suspenders catches malformed values that bypass the enum check."
+    },
+    "trace_duration_ms": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Per-trace duration in milliseconds (equals window_ms)."
+    },
+    "calibration_method": {
+      "type": "string",
+      "enum": ["r_wave_anchoring"],
+      "description": "How per-record amplitude calibration was computed. R-wave anchoring is always applied regardless of threshold strategy. Phase 1 only supports this one method; future methods would add new enum values rather than replacing this one."
+    },
+    "calibration_target_qrs_pp_mv": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Target peak-to-peak QRS amplitude in mV against which each record was calibrated."
+    },
+    "threshold_mode": {
+      "type": "string",
+      "enum": ["absolute", "percentile"],
+      "description": "Threshold strategy that decided which segments are healthy. 'absolute' = fixed mV cap; 'percentile' = per-record percentile of the calibrated p-p distribution."
+    },
+    "threshold_value": {
+      "type": "number",
+      "description": "Value used by the threshold strategy. mV for 'absolute' (e.g., 0.5 per Sánchez); 0..100 percentile for 'percentile'."
+    },
+    "band_hz": {
+      "type": "array",
+      "items": { "type": "number", "exclusiveMinimum": 0 },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Band-pass filter edges in Hz, [low, high]. Defaults to the clinical 30-300 Hz band."
+    },
+    "window_ms": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Sliding-window length in ms. Default 512 ms to match the classifier's T=512 input."
+    },
+    "window_samples": {
+      "type": "integer",
+      "exclusiveMinimum": 0,
+      "description": "Window length in samples (= window_ms * 1e-3 * fs_hz)."
+    },
+    "hop_ms": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Stride between adjacent windows in ms. Additive (not in the original format-version-1 spec but recorded for reproducibility; readers MAY ignore it)."
+    },
+    "source_records": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Record names that contributed at least one segment to this bank (e.g., 'iaf1_afw'). Allows zero entries (empty bank is valid)."
+    },
+    "traces": {
+      "type": "object",
+      "description": "Per-trace columns. Maps to the HDF5 `traces/` group. All columns have first dimension N (the segment count) and are aligned.",
+      "properties": {
+        "signal": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "number" } },
+          "description": "(N, window_samples) float32 — calibrated + band-pass-filtered bipolar EGM segments.",
+          "x-hdf5-dataset": { "name": "traces/signal", "dtype": "float32", "rank": 2 }
+        },
+        "label": {
+          "type": "array",
+          "items": { "type": "integer", "const": 0 },
+          "description": "(N,) int64 — all 0 (known healthy). Kept as an explicit column so downstream loaders can treat this bank polymorphically with SyntheticBank.",
+          "x-hdf5-dataset": { "name": "traces/label", "dtype": "int64", "rank": 1 }
+        },
+        "patient_id": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^iaf[1-8]$" },
+          "description": "(N,) UTF-8 — IAFDB patient identifier, one of 'iaf1'..'iaf8'.",
+          "x-hdf5-dataset": { "name": "traces/patient_id", "dtype": "utf-8", "rank": 1 }
+        },
+        "source_record": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "(N,) UTF-8 — IAFDB record name (e.g., 'iaf1_afw').",
+          "x-hdf5-dataset": { "name": "traces/source_record", "dtype": "utf-8", "rank": 1 }
+        },
+        "source_channel": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "(N,) UTF-8 — Bipolar channel name within the source record (e.g., 'CS12').",
+          "x-hdf5-dataset": { "name": "traces/source_channel", "dtype": "utf-8", "rank": 1 }
+        },
+        "start_sample": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 },
+          "description": "(N,) int64 — Sample offset of the segment into the source record. Combined with patient_id + source_record + window_samples, this uniquely identifies the trace's location in the raw IAFDB data.",
+          "x-hdf5-dataset": { "name": "traces/start_sample", "dtype": "int64", "rank": 1 }
+        },
+        "peak_to_peak_mv": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 0 },
+          "description": "(N,) float32 — Calibrated peak-to-peak amplitude in mV that passed the threshold check. Real-mV interpretation.",
+          "x-hdf5-dataset": { "name": "traces/peak_to_peak_mv", "dtype": "float32", "rank": 1 }
+        },
+        "calibration_scalar": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "(N,) float32 — Per-patient scalar applied to this segment during R-wave anchoring. signal_in_mv = signal_raw * calibration_scalar.",
+          "x-hdf5-dataset": { "name": "traces/calibration_scalar", "dtype": "float32", "rank": 1 }
+        }
+      },
+      "required": [
+        "signal", "label", "patient_id", "source_record", "source_channel",
+        "start_sample", "peak_to_peak_mv", "calibration_scalar"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version", "created_utc", "source", "fs_hz", "trace_duration_ms",
+    "calibration_method", "calibration_target_qrs_pp_mv", "threshold_mode",
+    "threshold_value", "band_hz", "window_ms", "window_samples",
+    "source_records", "traces"
+  ],
+  "additionalProperties": false,
+  "x-hdf5-mapping": {
+    "root_attrs": [
+      "fs_hz", "trace_duration_ms", "source", "calibration_method",
+      "calibration_target_qrs_pp_mv", "threshold_mode", "threshold_value",
+      "band_hz", "window_ms", "window_samples", "hop_ms", "created_utc",
+      "schema_version", "source_records"
+    ],
+    "traces_group": "traces"
+  }
+}

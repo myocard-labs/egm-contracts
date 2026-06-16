@@ -1,16 +1,14 @@
 # ---------------------------------------------------------------------------
-# pyproject.toml — myocard-labs python template
+# pyproject.toml — myocard-egm-contracts
 #
-# Find/replace before publishing:
-#   myocard-package-name   → PyPI distribution name (dash-separated, with myocard- prefix)
-#   myocard_package_name   → Python import name (underscore-separated)
-#   PACKAGE_DESCRIPTION    → one-line summary used by PyPI
-#   GITHUB_REPO_NAME       → bare repo name (no myocard- prefix)
+# Cross-language data-format schemas + validators for the myocard-labs
+# intracardiac EGM project. JSON-Schema-first: every format is declared in
+# src/myocard_egm_contracts/schemas/*.schema.json; Pydantic models (Python)
+# and C++ structs (eventually) are codegen'd from the same source.
 #
-# Convention recap (LOCKED-IN 2026-06-13, see intracardiac-platform/project/refactor_checklist.md):
-#   GitHub repo  : egm-contracts                  (bare)
-#   PyPI dist    : myocard-egm-contracts          (myocard- prefix)
-#   Import name  : myocard_egm_contracts          (underscore)
+# See:
+#   - intracardiac-platform/project/refactor_checklist.md (Phase 1 / egm-contracts)
+#   - feedback-schemas-json-schema-first memory
 # ---------------------------------------------------------------------------
 
 [build-system]
@@ -18,16 +16,16 @@ requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
 
 [project]
-name = "myocard-package-name"
+name = "myocard-egm-contracts"
 version = "0.1.0"
-description = "PACKAGE_DESCRIPTION"
+description = "Cross-language schemas + validators for the myocard-labs intracardiac EGM data formats."
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 authors = [
   { name = "Daniel Klein", email = "daniel.anthony.klein.88@gmail.com" },
 ]
-keywords = ["cardiac", "electrophysiology", "signal-processing", "egm"]
+keywords = ["cardiac", "electrophysiology", "signal-processing", "egm", "schema", "json-schema"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Science/Research",
@@ -42,42 +40,47 @@ classifiers = [
 ]
 
 dependencies = [
-  # Runtime deps go here. Keep this lean. Common floor: numpy + h5py.
-  # "numpy>=1.26",
-  # "h5py>=3.10",
+  "h5py>=3.10",
+  "jsonschema>=4.20",
+  "numpy>=1.26",
+  "pydantic>=2.5",
 ]
 
 [project.optional-dependencies]
 dev = [
+  "datamodel-code-generator>=0.25",
+  "mypy>=1.10",
+  "nbstripout>=0.7",
+  "pre-commit>=3.7",
   "pytest>=8.0",
   "pytest-cov>=5.0",
   "ruff>=0.6.0",
-  "mypy>=1.10",
-  "pre-commit>=3.7",
-  "nbstripout>=0.7",
 ]
 
 [project.urls]
-Homepage      = "https://github.com/myocard-labs/GITHUB_REPO_NAME"
-Repository    = "https://github.com/myocard-labs/GITHUB_REPO_NAME"
-Issues        = "https://github.com/myocard-labs/GITHUB_REPO_NAME/issues"
+Homepage      = "https://github.com/myocard-labs/intracardiac-platform"
+Repository    = "https://github.com/myocard-labs/egm-contracts"
+Issues        = "https://github.com/myocard-labs/egm-contracts/issues"
 Organization  = "https://github.com/myocard-labs"
-
-# Optional CLI entry points — uncomment + edit when the package ships commands.
-# [project.scripts]
-# myocard-foo = "myocard_package_name.cli:main"
 
 # ---------------------------------------------------------------------------
 # Hatch
 # ---------------------------------------------------------------------------
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/myocard_package_name"]
+packages = ["src/myocard_egm_contracts"]
+# Ship the JSON Schema source files in the wheel so consumers / validators
+# can read them at runtime via importlib.resources.
+artifacts = [
+  "src/myocard_egm_contracts/schemas/*.schema.json",
+  "src/myocard_egm_contracts/_generated/python/*.py",
+]
 
 [tool.hatch.build.targets.sdist]
 include = [
   "src/",
   "tests/",
+  "codegen/",
   "README.md",
   "LICENSE",
   "NOTICE",
@@ -92,6 +95,9 @@ include = [
 line-length = 100
 target-version = "py310"
 src = ["src", "tests"]
+# Generated code is not edited by hand — exclude from lint to avoid pinning
+# datamodel-code-generator's output to the ruff config.
+extend-exclude = ["src/myocard_egm_contracts/_generated/**"]
 
 [tool.ruff.lint]
 select = [
@@ -132,13 +138,12 @@ addopts = [
 ]
 filterwarnings = [
   "error",
-  # Add per-package allowlist below as needed, e.g.:
-  # "ignore::DeprecationWarning:some_third_party_lib",
 ]
 
 [tool.coverage.run]
-source = ["src/myocard_package_name"]
+source = ["src/myocard_egm_contracts"]
 branch = true
+omit = ["src/myocard_egm_contracts/_generated/*"]
 
 [tool.coverage.report]
 exclude_lines = [
@@ -162,16 +167,10 @@ disallow_untyped_defs = true
 no_implicit_optional = true
 show_error_codes = true
 files = ["src", "tests"]
+# Generated Pydantic models are accepted as-is; don't strict-check them
+# (datamodel-code-generator's output is not always strict-clean).
+exclude = ["src/myocard_egm_contracts/_generated/"]
 
-# Per-module overrides for libraries without type stubs.
-# Uncomment + edit when the package starts importing one of these.
-# Listing them here when the imports aren't present triggers
-# `warn_unused_configs` and clutters the mypy output.
-#
-# [[tool.mypy.overrides]]
-# module = [
-#   "h5py.*",
-#   "scipy.*",
-#   "matplotlib.*",
-# ]
-# ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = ["h5py.*", "jsonschema.*"]
+ignore_missing_imports = true
