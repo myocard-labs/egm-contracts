@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [release, development]
   pull_request:
-    branches: [main]
+    branches: [release, development]
 
 # Cancel superseded runs on the same ref.
 concurrency:
@@ -84,3 +84,56 @@ jobs:
 
       - name: Run mypy
         run: mypy
+
+  codegen-drift:
+    name: Codegen drift check
+    runs-on: ubuntu-latest
+    # The generated Pydantic models live in _generated/python/ and are checked
+    # in. This job re-runs gen_python.py and fails if the regenerated output
+    # differs from what's committed — catches schema/code drift.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package + dev extras
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Regenerate Python models from JSON Schemas
+        run: python codegen/gen_python.py
+
+      - name: Assert no diff vs committed _generated/python/
+        run: |
+          if ! git diff --exit-code src/myocard_egm_contracts/_generated/python/; then
+            echo "::error::Generated Pydantic models drifted from JSON Schemas."
+            echo "Run 'python codegen/gen_python.py' locally and commit the result."
+            exit 1
+          fi
+
+  schema-version-bump:
+    name: Schema version bump check
+    # Only runs on PRs (needs a base ref to diff against). Bypassed for PRs
+    # carrying the 'skip-schema-bump' label, intended for description-only
+    # schema edits — see docs/schema_evolution.md.
+    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-schema-bump')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so we can diff against base ref
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Check schema version bumps
+        env:
+          GITHUB_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: python tools/check_schema_versions.py
