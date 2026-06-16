@@ -17,7 +17,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "myocard-egm-contracts"
-version = "0.1.0"
+version = "0.1.1"
 description = "Cross-language schemas + validators for the myocard-labs intracardiac EGM data formats."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -70,10 +70,13 @@ Organization  = "https://github.com/myocard-labs"
 [tool.hatch.build.targets.wheel]
 packages = ["src/myocard_egm_contracts"]
 # Ship the JSON Schema source files in the wheel so consumers / validators
-# can read them at runtime via importlib.resources.
+# can read them at runtime via importlib.resources. Also ship the py.typed
+# marker so downstream consumers (e.g. myocard-egm-data) can mypy-check
+# imports from this package.
 artifacts = [
   "src/myocard_egm_contracts/schemas/*.schema.json",
   "src/myocard_egm_contracts/_generated/python/*.py",
+  "src/myocard_egm_contracts/py.typed",
 ]
 
 [tool.hatch.build.targets.sdist]

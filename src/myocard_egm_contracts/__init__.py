@@ -60,6 +60,17 @@ except ImportError:  # pragma: no cover — happens only before first codegen ru
 
 # Re-export the validators so consumers can `from myocard_egm_contracts
 # import validate_synthetic_bank` without knowing about the subpackage.
+# Re-export the schema introspection API. Consumers (e.g. myocard-egm-data
+# writers and readers) should pull schema versions, CSV column orders, and
+# type maps through these helpers rather than redeclaring them.
+from myocard_egm_contracts.schema_info import (
+    csv_column_order,
+    csv_required_columns,
+    current_version,
+    field_type_map,
+    get_schema,
+    supported_versions,
+)
 from myocard_egm_contracts.validators import (
     ValidationResult,
     validate_hybrid_eval_metrics,
@@ -80,12 +91,18 @@ except metadata.PackageNotFoundError:  # pragma: no cover — editable install w
 __all__ = [
     "ValidationResult",
     "__version__",
+    "csv_column_order",
+    "csv_required_columns",
+    "current_version",
+    "field_type_map",
+    "get_schema",
     "hybrid_eval_metrics",
     "iafdb_healthy_bank",
     "metrics",
     "model_metadata",
     "predictions",
     "run_record",
+    "supported_versions",
     "synthetic_bank",
     "validate_hybrid_eval_metrics",
     "validate_iafdb_healthy_bank",
