@@ -24,9 +24,8 @@ def test_supported_versions_returns_enum_for_each_schema() -> None:
     is supposed to be versioned, the enum was dropped accidentally."""
     for name in (
         "synthetic_bank",
-        "iafdb_healthy_bank",
+        "iafdb_bank",
         "run_record",
-        "predictions",
         "hybrid_eval_metrics",
         "model_metadata",
     ):
@@ -54,27 +53,6 @@ def test_metrics_has_no_schema_version() -> None:
 # ---------------------------------------------------------------------------
 # CSV column order
 # ---------------------------------------------------------------------------
-
-
-def test_predictions_csv_column_order_uses_extension_key() -> None:
-    """The predictions schema declares x-csv-column-order explicitly. The
-    helper must return that list, not the properties insertion order."""
-    columns = csv_column_order("predictions")
-    expected = (
-        "source",
-        "split",
-        "trace_index",
-        "true_label",
-        "prob_fibrotic",
-        "pred_label",
-        "logit",
-        "simulation_id",
-        "patient_id",
-        "fibrosis_density",
-        "eval_index",
-        "correct",
-    )
-    assert columns == expected
 
 
 def test_metrics_csv_column_order_falls_back_to_properties() -> None:

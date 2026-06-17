@@ -21,9 +21,9 @@ import pytest
 
 
 @pytest.fixture
-def valid_iafdb_healthy_bank(tmp_path: Path) -> Path:
-    """Write a tiny valid IAFDB healthy bank to a temp file and return its path."""
-    path = tmp_path / "iafdb_healthy_v1.h5"
+def valid_iafdb_bank(tmp_path: Path) -> Path:
+    """Write a tiny valid IAFDB bank to a temp file and return its path."""
+    path = tmp_path / "iafdb_v1.h5"
     str_dtype = h5py.string_dtype(encoding="utf-8")
     n = 2
     window_samples = 512
@@ -50,7 +50,6 @@ def valid_iafdb_healthy_bank(tmp_path: Path) -> Path:
 
         g = f.create_group("traces")
         g.create_dataset("signal", data=np.zeros((n, window_samples), dtype=np.float32))
-        g.create_dataset("label", data=np.zeros(n, dtype=np.int64))
         g.create_dataset(
             "patient_id",
             data=np.array(["iaf1", "iaf1"], dtype=object),
@@ -210,52 +209,11 @@ def valid_metrics_csv(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def valid_predictions(tmp_path: Path) -> Path:
-    """Write a tiny valid predictions manifest JSON and return its path."""
-    path = tmp_path / "predictions_test.json"
-    doc: dict[str, Any] = {
-        "schema_version": "2.0",
-        "created_utc": "2026-06-15T22:00:00Z",
-        "eval_name": "test",
-        "n": 1,
-        "columns": [
-            "source",
-            "split",
-            "trace_index",
-            "true_label",
-            "prob_fibrotic",
-            "pred_label",
-            "logit",
-            "simulation_id",
-            "patient_id",
-            "fibrosis_density",
-            "eval_index",
-            "correct",
-        ],
-        "producer": {"run_id": "test_run", "model_checkpoint": "checkpoints/best.pt"},
-        "sources": {"synthetic_bank": {"path": "banks/syn.h5", "schema_version": "1.0"}},
-        "predictions": [
-            {
-                "source": "synthetic",
-                "split": "test",
-                "trace_index": 0,
-                "true_label": 1,
-                "prob_fibrotic": 0.9,
-                "pred_label": 1,
-            }
-        ],
-    }
-    path.write_text(json.dumps(doc), encoding="utf-8")
-    return path
-
-
-@pytest.fixture
 def valid_hybrid_eval_metrics(tmp_path: Path) -> Path:
     """Write a tiny valid hybrid_eval_metrics.json and return its path."""
     path = tmp_path / "hybrid_eval_metrics.json"
     doc: dict[str, Any] = {
-        "schema_version": "1.0",
-        "predictions_schema_version": "2.0",
+        "schema_version": "2.0",
         "created_utc": "2026-06-15T22:00:00Z",
         "producer": {"run_id": "test_run", "model_checkpoint": "checkpoints/best.pt"},
         "mixed": {

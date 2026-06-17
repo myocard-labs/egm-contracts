@@ -14,20 +14,12 @@ class SchemaVersion(Enum):
     Versioned schema identifier. Consumers MUST refuse unknown major versions.
     """
 
-    field_1_0 = "1.0"
-
-
-class PredictionsSchemaVersion(Enum):
-    """
-    Version stamp for the sibling predictions CSV/JSON pair so CSV consumers can validate it (CSV has no place for an embedded version field). Producer MUST write the predictions file using this exact version.
-    """
-
     field_2_0 = "2.0"
 
 
 class Producer(BaseModel):
     """
-    Identifies the model + run that produced this eval. Matches the producer object in the paired predictions manifest.
+    Identifies the model + run that produced this eval.
     """
 
     model_config = ConfigDict(
@@ -101,7 +93,7 @@ class IafdbOnly(BaseModel):
 
 class HybridEvalMetrics(BaseModel):
     """
-    Aggregate metrics for a hybrid (mixed synthetic + IAFDB) evaluation, written by egm-classifier's hybrid-eval CLI as hybrid_eval_metrics.json. Schema version 1.0. Pairs with the predictions file written under the predictions.schema.json contract; this metrics file records the aggregate scores while the predictions file holds per-trace outputs. Terminology note: 'hybrid' here follows the cardiac-ML convention established by Sánchez et al. 2021 (mixed in silico + in vivo data) — see project/known_issues.md for the rationale.
+    Aggregate metrics for a hybrid (mixed synthetic + IAFDB) evaluation, written by egm-classifier's hybrid-eval CLI as hybrid_eval_metrics.json. Schema version 2.0. Per-trace prediction outputs now live inside the producing ClassifierBank rather than a separate predictions document. Terminology note: 'hybrid' here follows the cardiac-ML convention established by Sánchez et al. 2021 (mixed in silico + in vivo data).
     """
 
     model_config = ConfigDict(
@@ -111,17 +103,13 @@ class HybridEvalMetrics(BaseModel):
     """
     Versioned schema identifier. Consumers MUST refuse unknown major versions.
     """
-    predictions_schema_version: PredictionsSchemaVersion
-    """
-    Version stamp for the sibling predictions CSV/JSON pair so CSV consumers can validate it (CSV has no place for an embedded version field). Producer MUST write the predictions file using this exact version.
-    """
     created_utc: AwareDatetime
     """
     ISO-8601 UTC timestamp captured at write time.
     """
     producer: Producer
     """
-    Identifies the model + run that produced this eval. Matches the producer object in the paired predictions manifest.
+    Identifies the model + run that produced this eval.
     """
     mixed: Mixed
     """

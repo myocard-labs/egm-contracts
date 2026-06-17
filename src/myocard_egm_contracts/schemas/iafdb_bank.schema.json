@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/iafdb_healthy_bank.schema.json",
-  "title": "IafdbHealthyBank",
-  "description": "Calibrated + band-pass-filtered healthy bipolar EGM segments extracted from PhysioNet IAFDB. Schema version 1.0. Symmetric with SyntheticBank: maps to an HDF5 file with bank-level root attrs plus a `traces/` group containing per-trace columns. All segments are label==0 (healthy).",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/iafdb_bank.schema.json",
+  "title": "IafdbBank",
+  "description": "Calibrated + band-pass-filtered bipolar EGM segments extracted from PhysioNet IAFDB. Schema version 1.0. Symmetric with SyntheticBank: maps to an HDF5 file with bank-level root attrs plus a `traces/` group containing per-trace columns. No `label` column — labeling is downstream policy applied at ClassifierBank conversion time by a consumer-supplied label_fn.",
   "type": "object",
   "properties": {
     "schema_version": {
@@ -44,7 +44,7 @@
     "threshold_mode": {
       "type": "string",
       "enum": ["absolute", "percentile"],
-      "description": "Threshold strategy that decided which segments are healthy. 'absolute' = fixed mV cap; 'percentile' = per-record percentile of the calibrated p-p distribution."
+      "description": "Threshold strategy that decided which segments are retained. 'absolute' = fixed mV cap; 'percentile' = per-record percentile of the calibrated p-p distribution."
     },
     "threshold_value": {
       "type": "number",
@@ -87,12 +87,6 @@
           "description": "(N, window_samples) float32 — calibrated + band-pass-filtered bipolar EGM segments.",
           "x-hdf5-dataset": { "name": "traces/signal", "dtype": "float32", "rank": 2 }
         },
-        "label": {
-          "type": "array",
-          "items": { "type": "integer", "const": 0 },
-          "description": "(N,) int64 — all 0 (known healthy). Kept as an explicit column so downstream loaders can treat this bank polymorphically with SyntheticBank.",
-          "x-hdf5-dataset": { "name": "traces/label", "dtype": "int64", "rank": 1 }
-        },
         "patient_id": {
           "type": "array",
           "items": { "type": "string", "pattern": "^iaf[1-8]$" },
@@ -131,7 +125,7 @@
         }
       },
       "required": [
-        "signal", "label", "patient_id", "source_record", "source_channel",
+        "signal", "patient_id", "source_record", "source_channel",
         "start_sample", "peak_to_peak_mv", "calibration_scalar"
       ],
       "additionalProperties": false

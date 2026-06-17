@@ -23,13 +23,12 @@ def test_version_is_pep440() -> None:
 
 
 def test_generated_models_are_present() -> None:
-    """All seven schema modules should be importable after codegen runs."""
+    """All six schema modules should be importable after codegen runs."""
     expected = [
         "hybrid_eval_metrics",
-        "iafdb_healthy_bank",
+        "iafdb_bank",
         "metrics",
         "model_metadata",
-        "predictions",
         "run_record",
         "synthetic_bank",
     ]
