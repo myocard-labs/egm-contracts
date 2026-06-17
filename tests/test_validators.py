@@ -13,10 +13,9 @@ import h5py
 
 from myocard_egm_contracts.validators import (
     validate_hybrid_eval_metrics,
-    validate_iafdb_healthy_bank,
+    validate_iafdb_bank,
     validate_metrics,
     validate_model_metadata,
-    validate_predictions,
     validate_run_record,
     validate_synthetic_bank,
 )
@@ -26,8 +25,8 @@ from myocard_egm_contracts.validators import (
 # ---------------------------------------------------------------------------
 
 
-def test_iafdb_healthy_bank_validates(valid_iafdb_healthy_bank: Path) -> None:
-    result = validate_iafdb_healthy_bank(valid_iafdb_healthy_bank)
+def test_iafdb_bank_validates(valid_iafdb_bank: Path) -> None:
+    result = validate_iafdb_bank(valid_iafdb_bank)
     assert result.ok, result.issues
 
 
@@ -43,11 +42,6 @@ def test_run_record_validates(valid_run_record: Path) -> None:
 
 def test_metrics_csv_validates(valid_metrics_csv: Path) -> None:
     result = validate_metrics(valid_metrics_csv)
-    assert result.ok, result.issues
-
-
-def test_predictions_validates(valid_predictions: Path) -> None:
-    result = validate_predictions(valid_predictions)
     assert result.ok, result.issues
 
 
@@ -81,14 +75,14 @@ def test_malformed_json_fails(tmp_path: Path) -> None:
 
 
 def test_iafdb_bank_window_samples_mismatch_fails(
-    valid_iafdb_healthy_bank: Path,
+    valid_iafdb_bank: Path,
 ) -> None:
     """The cross-field validator should catch window_samples != fs * ms / 1000."""
     # Mutate the fixture: set window_samples to a wrong value.
-    with h5py.File(valid_iafdb_healthy_bank, "r+") as f:
+    with h5py.File(valid_iafdb_bank, "r+") as f:
         f.attrs["window_samples"] = 999
 
-    result = validate_iafdb_healthy_bank(valid_iafdb_healthy_bank)
+    result = validate_iafdb_bank(valid_iafdb_bank)
     assert not result
     assert any("window_samples" in issue for issue in result.issues), result.issues
 
@@ -104,16 +98,6 @@ def test_run_record_missing_required_field_fails(
     result = validate_run_record(valid_run_record)
     assert not result
     assert any("best" in issue for issue in result.issues), result.issues
-
-
-def test_predictions_unknown_source_value_fails(valid_predictions: Path) -> None:
-    doc = json.loads(valid_predictions.read_text())
-    doc["predictions"][0]["source"] = "not_a_real_source"
-    valid_predictions.write_text(json.dumps(doc))
-
-    result = validate_predictions(valid_predictions)
-    assert not result
-    assert any("source" in issue for issue in result.issues), result.issues
 
 
 def test_synthetic_bank_wrong_schema_version_fails(
