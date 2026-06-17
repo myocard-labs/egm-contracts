@@ -8,7 +8,7 @@ Part of the [myocard-labs](https://github.com/myocard-labs) cardiac signal proce
 
 ## Why
 
-This package owns the **schemas** for every data format used across the project — synthetic banks, IAFDB banks, training-run records, predictions, hybrid-eval reports, and the deployment-time model metadata sidecar. It is the slowly-changing interface boundary between producers (`iafdb-pipeline`, `synthetic-egm-pipeline`, `egm-classifier`) and consumers (`egm-classifier` again at training/eval time, `egm-data`, `egm-studio`).
+This package owns the **schemas** for every data format used across the project — synthetic banks, IAFDB banks, training-run records, hybrid-eval reports, and the deployment-time model metadata sidecar. It is the slowly-changing interface boundary between producers (`iafdb-pipeline`, `synthetic-egm-pipeline`, `egm-classifier`) and consumers (`egm-data`, `egm-studio`).
 
 **JSON-Schema-first.** The master truth for every format is a JSON Schema (Draft 2020-12) file. Pydantic models (Python) are codegen'd from those schemas; C++ structs (eventually, for the TensorRT-targeted deployment) will be codegen'd from the same source. The schema files are the only place you edit when a format changes.
 
@@ -47,14 +47,14 @@ python codegen/gen_python.py  # generate Pydantic models on first clone
 ### Python
 
 ```python
-from myocard_egm_contracts import iafdb_healthy_bank
-from myocard_egm_contracts.validators import validate_iafdb_healthy_bank
+from myocard_egm_contracts import iafdb_bank
+from myocard_egm_contracts.validators import validate_iafdb_bank
 
 # Type-safe construction (raises pydantic.ValidationError on bad input).
-bank_doc = iafdb_healthy_bank.IafdbHealthyBank.model_validate(some_dict)
+bank_doc = iafdb_bank.IafdbBank.model_validate(some_dict)
 
 # File-level conformance check against the on-disk HDF5.
-result = validate_iafdb_healthy_bank("iafdb_healthy_v1.h5")
+result = validate_iafdb_bank("iafdb_v1.h5")
 if not result.ok:
     for issue in result.issues:
         print(issue)
@@ -76,9 +76,9 @@ target_link_libraries(my_target PRIVATE myocard_egm_contracts::headers)
 ```
 
 ```cpp
-#include <myocard_egm_contracts/iafdb_healthy_bank.hpp>
+#include <myocard_egm_contracts/iafdb_bank.hpp>
 
-auto bank = myocard::egm_contracts::IafdbHealthyBank::from_json(payload);
+auto bank = myocard::egm_contracts::IafdbBank::from_json(payload);
 ```
 
 Header-only; no compiled library shipped.
@@ -87,17 +87,18 @@ Header-only; no compiled library shipped.
 
 ## Schemas
 
-The seven formats currently described:
+The six formats currently described:
 
 | Schema | On-disk format | Producer | Consumer(s) |
 |---|---|---|---|
-| `synthetic_bank` | HDF5 | `synthetic-egm-pipeline` | `egm-classifier`, `egm-studio` |
-| `iafdb_healthy_bank` | HDF5 | `iafdb-pipeline` | `egm-classifier`, `egm-studio`, **C++ inference benchmark** |
+| `synthetic_bank` | HDF5 | `synthetic-egm-pipeline` | `egm-data` (converted to ClassifierBank) |
+| `iafdb_bank` | HDF5 | `iafdb-pipeline` | `egm-data` (converted to ClassifierBank), **C++ inference benchmark** |
 | `run_record` | JSON (`run.json`) | `egm-classifier` (training) | `egm-studio`, paper figures |
 | `metrics` | CSV (`metrics.csv`) | `egm-classifier` (training) | `egm-studio`, paper figures |
-| `predictions` | CSV + JSON (any eval) | `egm-classifier` (per-split eval + hybrid eval) | `egm-studio`, paper figures, **C++ inference benchmark** |
 | `hybrid_eval_metrics` | JSON (`hybrid_eval_metrics.json`) | `egm-classifier` (hybrid eval) | `egm-studio`, paper figures |
 | `model_metadata` | JSON sidecar | `egm-classifier` (export) | TensorRT C++ inference runtime |
+
+Per-trace prediction outputs are no longer their own format — they live inside the ClassifierBank produced by the eval step (in `egm-data`). The `hybrid_eval_metrics` schema records only the aggregate scores.
 
 "Hybrid" follows the cardiac-ML convention from Sánchez et al. 2021 — mixed in silico + in vivo data — and refers to the *evaluation set* that mixes synthetic positives with real IAFDB negatives. The synthetic bank itself is not called "hybrid" even when it has IAFDB-noise conditioning applied, since the labels are 100% synthetic. See `docs/schemas/` for the narrative explanation of each schema and `project/known_issues.md` for terminology and Phase 2 evolution notes.
 

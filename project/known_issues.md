@@ -55,26 +55,24 @@ as part of the same change.
 
 ---
 
-### `predictions` schema breaking change (v1 → v2) — migration of existing files
-
-**Current state.** The unified `predictions` schema (v2) collapses the v1
-`predictions` and `test_predictions` formats. Any existing on-disk
-`predictions_<split>.csv` / `predictions_<split>.json` from earlier
-egm_classifier runs are v1 and won't validate against the v2 schema.
-
-**Resolution plan.** When egm-classifier is refactored (Phase 5 of the
-refactor checklist) the producer switches to v2 directly. Existing v1 files
-from v1_baseline / v1.5 / v1_iafdb investigations are kept as-is in their
-checkpoint dirs — they're historical artifacts cited by
-`v1_*_investigation.md` files, not active data. If a future workflow needs to
-re-process them, write a one-off v1→v2 converter rather than complicating the
-schema with a backward-compat mode.
-
-**Trigger.** Phase 5 of the refactor checklist (egm-classifier refactor).
-
----
-
 ## Resolved / closed
+
+### `predictions` schema retired (v0.1.2)
+
+The standalone `predictions` schema (CSV+JSON pair) was retired in
+contracts v0.1.2. Per-trace prediction outputs now live inside the
+producing `ClassifierBank` in egm-data; the `hybrid_eval_metrics`
+schema (bumped to v2.0) records only the aggregate scores. Existing
+v1 prediction files from v1_baseline / v1.5 / v1_iafdb investigations
+are kept as-is in their checkpoint dirs as historical artifacts.
+
+### `iafdb_healthy_bank` → `iafdb_bank` rename + label removal (v0.1.2)
+
+The schema was renamed and its `traces/label` column removed. The IAFDB
+bank is now just a calibrated, band-passed, threshold-selected segment
+collection — labeling decisions move to ClassifierBank conversion time
+via a consumer-supplied `label_fn`. Existing iafdb_healthy_bank files
+are obsolete; regenerate via the iafdb-pipeline once it's refactored.
 
 ### `format_version` vs `schema_version` field name inconsistency (2026-06-15)
 

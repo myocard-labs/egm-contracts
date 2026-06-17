@@ -4,12 +4,11 @@
 
 Aggregate metrics for a **hybrid evaluation** — an evaluation where
 the test set mixes synthetic positives with real-data negatives.
-Written as `hybrid_eval_metrics.json`. Pairs with a
-`predictions_<eval_name>.csv` + `predictions_<eval_name>.json`
-written under the `predictions` contract: this file records the
-aggregate scores; the predictions file holds per-trace outputs.
+Written as `hybrid_eval_metrics.json`. Per-trace prediction outputs
+for the same evaluation live inside the producing ClassifierBank
+(in `egm-data`); this document records only the aggregate scores.
 
-Schema version: `1.0`.
+Schema version: `2.0`.
 
 ## Terminology: "hybrid"
 
@@ -48,14 +47,9 @@ section is for. Three sentinel signals catch the saturation case:
 
 ### Top-level
 
-- **`schema_version`** — `"1.0"`.
-- **`predictions_schema_version`** — version stamp for the sibling
-  predictions CSV/JSON. Producer must write the predictions file
-  using exactly this version. Currently
-  `"2.0"`.
+- **`schema_version`** — `"2.0"`.
 - **`created_utc`** — ISO-8601 timestamp.
-- **`producer`** — identifies the model + run. Matches the
-  `producer` object in the paired predictions manifest. Required:
+- **`producer`** — identifies the model + run. Required:
   `run_id`, `model_checkpoint`.
 - **`mixed`** — aggregate metrics on the full mixed eval set.
 - **`iafdb_only`** — metrics on the real-data rows alone.
@@ -87,7 +81,9 @@ section is for. Three sentinel signals catch the saturation case:
 
 ## Versioning
 
-Currently `1.0`. Bump triggers:
+Currently `2.0` (bumped from 1.0 when the standalone predictions
+schema was retired and per-trace prediction outputs migrated into
+the ClassifierBank format). Bump triggers:
 
 - Adding required real-data-only diagnostics (e.g., calibration
   drift).
@@ -105,8 +101,7 @@ sim-only baseline vs hybrid eval comparison.
 
 ```json
 {
-  "schema_version": "1.0",
-  "predictions_schema_version": "2.0",
+  "schema_version": "2.0",
   "created_utc": "2026-06-13T10:00:00Z",
   "producer": {
     "run_id": "v1_baseline",

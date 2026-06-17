@@ -15,9 +15,9 @@ JSON-encoded sub-config attrs on the synthetic bank, the cross-field
 Example::
 
     from pathlib import Path
-    from myocard_egm_contracts.validators import validate_iafdb_healthy_bank
+    from myocard_egm_contracts.validators import validate_iafdb_bank
 
-    result = validate_iafdb_healthy_bank(Path("iafdb_healthy_v1.h5"))
+    result = validate_iafdb_bank(Path("iafdb_v1.h5"))
     if not result:
         for issue in result.issues:
             print(issue)
@@ -27,20 +27,18 @@ from __future__ import annotations
 
 from ._result import ValidationResult
 from .hybrid_eval_metrics import validate_hybrid_eval_metrics
-from .iafdb_healthy_bank import validate_iafdb_healthy_bank
+from .iafdb_bank import validate_iafdb_bank
 from .metrics import validate_metrics
 from .model_metadata import validate_model_metadata
-from .predictions import validate_predictions
 from .run_record import validate_run_record
 from .synthetic_bank import validate_synthetic_bank
 
 __all__ = [
     "ValidationResult",
     "validate_hybrid_eval_metrics",
-    "validate_iafdb_healthy_bank",
+    "validate_iafdb_bank",
     "validate_metrics",
     "validate_model_metadata",
-    "validate_predictions",
     "validate_run_record",
     "validate_synthetic_bank",
 ]

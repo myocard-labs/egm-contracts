@@ -18,14 +18,14 @@ Public API surface (all re-exported here for convenience):
 
 Example::
 
-    from myocard_egm_contracts import iafdb_healthy_bank
-    from myocard_egm_contracts.validators import validate_iafdb_healthy_bank
+    from myocard_egm_contracts import iafdb_bank
+    from myocard_egm_contracts.validators import validate_iafdb_bank
 
     # Type-safe construction (raises pydantic.ValidationError on bad input).
-    bank = iafdb_healthy_bank.IafdbHealthyBank.model_validate(some_dict)
+    bank = iafdb_bank.IafdbBank.model_validate(some_dict)
 
     # File-level conformance check (returns ValidationResult).
-    result = validate_iafdb_healthy_bank(Path("iafdb_healthy_v1.h5"))
+    result = validate_iafdb_bank(Path("iafdb_v1.h5"))
     if not result.ok:
         for issue in result.issues:
             print(issue)
@@ -42,19 +42,17 @@ from importlib import metadata
 try:
     from myocard_egm_contracts._generated.python import (
         hybrid_eval_metrics,
-        iafdb_healthy_bank,
+        iafdb_bank,
         metrics,
         model_metadata,
-        predictions,
         run_record,
         synthetic_bank,
     )
 except ImportError:  # pragma: no cover — happens only before first codegen run
     hybrid_eval_metrics = None  # type: ignore[assignment]
-    iafdb_healthy_bank = None  # type: ignore[assignment]
+    iafdb_bank = None  # type: ignore[assignment]
     metrics = None  # type: ignore[assignment]
     model_metadata = None  # type: ignore[assignment]
-    predictions = None  # type: ignore[assignment]
     run_record = None  # type: ignore[assignment]
     synthetic_bank = None  # type: ignore[assignment]
 
@@ -74,10 +72,9 @@ from myocard_egm_contracts.schema_info import (
 from myocard_egm_contracts.validators import (
     ValidationResult,
     validate_hybrid_eval_metrics,
-    validate_iafdb_healthy_bank,
+    validate_iafdb_bank,
     validate_metrics,
     validate_model_metadata,
-    validate_predictions,
     validate_run_record,
     validate_synthetic_bank,
 )
@@ -97,18 +94,16 @@ __all__ = [
     "field_type_map",
     "get_schema",
     "hybrid_eval_metrics",
-    "iafdb_healthy_bank",
+    "iafdb_bank",
     "metrics",
     "model_metadata",
-    "predictions",
     "run_record",
     "supported_versions",
     "synthetic_bank",
     "validate_hybrid_eval_metrics",
-    "validate_iafdb_healthy_bank",
+    "validate_iafdb_bank",
     "validate_metrics",
     "validate_model_metadata",
-    "validate_predictions",
     "validate_run_record",
     "validate_synthetic_bank",
 ]
