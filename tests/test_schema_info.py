@@ -25,6 +25,8 @@ def test_supported_versions_returns_enum_for_each_schema() -> None:
     for name in (
         "synthetic_bank",
         "iafdb_bank",
+        "noise_bank",
+        "noise_bank_run_record",
         "run_record",
         "hybrid_eval_metrics",
         "model_metadata",

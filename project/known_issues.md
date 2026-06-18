@@ -57,6 +57,45 @@ as part of the same change.
 
 ## Resolved / closed
 
+### `noise_bank` + `noise_bank_run_record` schemas added; `iafdb_bank` "none" filter mode (v0.2.0)
+
+Three related changes shipped together to support Phase 3 of the polyrepo
+refactor:
+
+- `noise_bank/1.0` — new minimal HDF5 schema for low-amplitude (quiet)
+  bipolar EGM segments. **Intentionally lean**: carries only the fields
+  the synthetic mixer actually consumes (signal, source_record,
+  source_channel per trace; schema_version / created_utc / source /
+  fs_hz at root). The producer is `iafdb-pipeline` today, but the
+  schema is dataset-agnostic so any future real EGM source slots in
+  without a schema bump.
+- `noise_bank_run_record/1.0` — new JSON sidecar schema that captures
+  extraction provenance (calibration scheme, threshold strategy,
+  windowing parameters, optional per-trace audit arrays). Written by
+  the same producer that writes the bank, paired with the bank by
+  name-stem convention (same pattern as `metrics.csv` ↔ `run.json` in
+  egm-classifier). The mixer never opens the sidecar; debuggers,
+  reproducibility audits, and the white paper's methods section do.
+  Factoring decision (per Daniel 2026-06-17): the original noise_bank
+  draft tried to combine data + methods in one HDF5 file; auditing
+  showed the v1 mixer math uses 1 of 23 fields and the rest is
+  provenance. Splitting into bank + run record matches the existing
+  project pattern and keeps each schema honest about its job.
+- `iafdb_bank/1.1` — added `"none"` to the `threshold_mode` enum and
+  made `threshold_value` nullable. Enables the unfiltered-export path
+  for pretraining banks where every windowed segment is retained.
+  Old `1.0` files no longer validate (pre-1.0 of egm-contracts; no
+  back-compat needed since iafdb-pipeline hasn't shipped a tagged
+  release yet).
+
+**Future work flagged but deferred:** `iafdb_bank` has the same
+data + provenance bloat issue as the original noise_bank draft (only a
+few of its fields are consumed by egm-data's converter; the rest is
+extraction provenance). Daniel decided not to refactor iafdb_bank now —
+the ClassifierBank pipeline already highlights the useful subset, and
+further restructuring would delay the science. Revisit when motivation
+strikes.
+
 ### `predictions` schema retired (v0.1.2)
 
 The standalone `predictions` schema (CSV+JSON pair) was retired in

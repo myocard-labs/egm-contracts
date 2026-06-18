@@ -9,5 +9,7 @@ from . import hybrid_eval_metrics  # noqa: F401
 from . import iafdb_bank  # noqa: F401
 from . import metrics  # noqa: F401
 from . import model_metadata  # noqa: F401
+from . import noise_bank  # noqa: F401
+from . import noise_bank_run_record  # noqa: F401
 from . import run_record  # noqa: F401
 from . import synthetic_bank  # noqa: F401

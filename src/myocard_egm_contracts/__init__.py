@@ -45,6 +45,8 @@ try:
         iafdb_bank,
         metrics,
         model_metadata,
+        noise_bank,
+        noise_bank_run_record,
         run_record,
         synthetic_bank,
     )
@@ -53,6 +55,8 @@ except ImportError:  # pragma: no cover — happens only before first codegen ru
     iafdb_bank = None  # type: ignore[assignment]
     metrics = None  # type: ignore[assignment]
     model_metadata = None  # type: ignore[assignment]
+    noise_bank = None  # type: ignore[assignment]
+    noise_bank_run_record = None  # type: ignore[assignment]
     run_record = None  # type: ignore[assignment]
     synthetic_bank = None  # type: ignore[assignment]
 
@@ -75,6 +79,8 @@ from myocard_egm_contracts.validators import (
     validate_iafdb_bank,
     validate_metrics,
     validate_model_metadata,
+    validate_noise_bank,
+    validate_noise_bank_run_record,
     validate_run_record,
     validate_synthetic_bank,
 )
@@ -97,6 +103,8 @@ __all__ = [
     "iafdb_bank",
     "metrics",
     "model_metadata",
+    "noise_bank",
+    "noise_bank_run_record",
     "run_record",
     "supported_versions",
     "synthetic_bank",
@@ -104,6 +112,8 @@ __all__ = [
     "validate_iafdb_bank",
     "validate_metrics",
     "validate_model_metadata",
+    "validate_noise_bank",
+    "validate_noise_bank_run_record",
     "validate_run_record",
     "validate_synthetic_bank",
 ]

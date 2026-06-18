@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/noise_bank.schema.json",
+  "title": "NoiseBank",
+  "description": "Low-amplitude (quiet) bipolar EGM segments used as additive noise by the synthetic-EGM mixer. Schema version 1.0. Intentionally minimal: only the fields the mixer actually consumes are required here. Extraction provenance (calibration scheme, threshold strategy, filter band, per-trace metadata) lives in a sibling noise_bank_run_record.json file. The convention is the same as metrics.csv + run.json in egm-classifier: the two files are written together with matching name stems and the consumer that needs methods opens the sibling.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0"],
+      "description": "Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions."
+    },
+    "created_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp captured at write time."
+    },
+    "source": {
+      "type": "string",
+      "description": "Free-form provenance tag identifying the upstream dataset (e.g., 'iafdb v1.0.0'). Producers stamp this; consumers read it to decide whether banks from different sources are mixable. Not an enum so new datasets can show up without a schema bump."
+    },
+    "fs_hz": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Sampling rate in Hz. The mixer asserts that this matches the synthetic side's fs and refuses to mix if it doesn't."
+    },
+    "traces": {
+      "type": "object",
+      "description": "Per-trace columns. Maps to the HDF5 `traces/` group. All columns have first dimension N (the segment count) and are aligned.",
+      "properties": {
+        "signal": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "number" } },
+          "description": "(N, T) float32 — band-pass-filtered bipolar window. The only column the mixer's math reads.",
+          "x-hdf5-dataset": { "name": "traces/signal", "dtype": "float32", "rank": 2 }
+        },
+        "source_record": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "(N,) UTF-8 — Source-dataset record identifier (e.g., 'iaf1_afw' for IAFDB). The mixer copies this onto each output trace as an audit field; downstream debugging can trace a hybrid sample back to the source noise.",
+          "x-hdf5-dataset": { "name": "traces/source_record", "dtype": "utf-8", "rank": 1 }
+        },
+        "source_channel": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "(N,) UTF-8 — Bipolar channel name within the source record (e.g., 'CS12' for IAFDB). Same audit-propagation role as source_record.",
+          "x-hdf5-dataset": { "name": "traces/source_channel", "dtype": "utf-8", "rank": 1 }
+        }
+      },
+      "required": ["signal", "source_record", "source_channel"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["schema_version", "created_utc", "source", "fs_hz", "traces"],
+  "additionalProperties": false,
+  "x-hdf5-mapping": {
+    "root_attrs": ["schema_version", "created_utc", "source", "fs_hz"],
+    "traces_group": "traces"
+  }
+}

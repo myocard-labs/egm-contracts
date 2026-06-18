@@ -29,7 +29,7 @@ def valid_iafdb_bank(tmp_path: Path) -> Path:
     window_samples = 512
 
     with h5py.File(path, "w") as f:
-        f.attrs["schema_version"] = "1.0"
+        f.attrs["schema_version"] = "1.1"
         f.attrs["created_utc"] = "2026-06-15T22:00:00Z"
         f.attrs["source"] = "iafdb v1.0.0"
         f.attrs["fs_hz"] = 1000.0
@@ -68,6 +68,85 @@ def valid_iafdb_bank(tmp_path: Path) -> Path:
         g.create_dataset("start_sample", data=np.array([0, 256], dtype=np.int64))
         g.create_dataset("peak_to_peak_mv", data=np.array([0.42, 0.51], dtype=np.float32))
         g.create_dataset("calibration_scalar", data=np.array([0.0035, 0.0035], dtype=np.float32))
+    return path
+
+
+@pytest.fixture
+def valid_noise_bank(tmp_path: Path) -> Path:
+    """Write a tiny valid (slim) noise bank to a temp file and return its path.
+
+    The noise_bank schema (v1.0) is intentionally minimal: only the fields
+    the mixer actually consumes (signal + source_record + source_channel
+    per trace, plus schema_version / created_utc / source / fs_hz at root).
+    Extraction provenance is tested via the valid_noise_bank_run_record
+    fixture below.
+    """
+    path = tmp_path / "noise_v1.h5"
+    str_dtype = h5py.string_dtype(encoding="utf-8")
+    n = 2
+    window_samples = 512
+
+    with h5py.File(path, "w") as f:
+        f.attrs["schema_version"] = "1.0"
+        f.attrs["created_utc"] = "2026-06-17T22:00:00Z"
+        f.attrs["source"] = "iafdb v1.0.0"
+        f.attrs["fs_hz"] = 1000.0
+
+        g = f.create_group("traces")
+        g.create_dataset("signal", data=np.zeros((n, window_samples), dtype=np.float32))
+        g.create_dataset(
+            "source_record",
+            data=np.array(["iaf1_afw", "iaf1_afw"], dtype=object),
+            dtype=str_dtype,
+        )
+        g.create_dataset(
+            "source_channel",
+            data=np.array(["CS12", "CS34"], dtype=object),
+            dtype=str_dtype,
+        )
+    return path
+
+
+@pytest.fixture
+def valid_noise_bank_run_record(tmp_path: Path) -> Path:
+    """Write a tiny valid noise_bank_run_record.json and return its path.
+
+    Matches the valid_noise_bank fixture's parameters so the two files
+    represent a coherent producer output. Convention is sibling files
+    with matching name stem (e.g. noise_v1.h5 + noise_v1_run_record.json);
+    the schema doesn't enforce the pairing so we just write the JSON to
+    its own path.
+    """
+    path = tmp_path / "noise_v1_run_record.json"
+    doc = {
+        "schema_version": "1.0",
+        "created_utc": "2026-06-17T22:00:00Z",
+        "source": "iafdb v1.0.0",
+        "description": "tiny test fixture",
+        "fs_hz": 1000.0,
+        "windowing": {
+            "window_ms": 512.0,
+            "window_samples": 512,
+            "hop_ms": 256.0,
+        },
+        "band_hz": [30.0, 300.0],
+        "calibration": {
+            "method": "r_wave_anchoring",
+            "target_qrs_pp_mv": 1.0,
+        },
+        "selection": {
+            "threshold_mode": "percentile",
+            "threshold_value": 10.0,
+        },
+        "source_records": ["iaf1_afw"],
+        "per_trace_provenance": {
+            "patient_id": ["iaf1", "iaf1"],
+            "start_sample": [0, 256],
+            "peak_to_peak_mv": [0.05, 0.07],
+            "calibration_scalar": [0.0035, 0.0035],
+        },
+    }
+    path.write_text(json.dumps(doc), encoding="utf-8")
     return path
 
 

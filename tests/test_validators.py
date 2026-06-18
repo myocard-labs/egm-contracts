@@ -16,6 +16,8 @@ from myocard_egm_contracts.validators import (
     validate_iafdb_bank,
     validate_metrics,
     validate_model_metadata,
+    validate_noise_bank,
+    validate_noise_bank_run_record,
     validate_run_record,
     validate_synthetic_bank,
 )
@@ -27,6 +29,34 @@ from myocard_egm_contracts.validators import (
 
 def test_iafdb_bank_validates(valid_iafdb_bank: Path) -> None:
     result = validate_iafdb_bank(valid_iafdb_bank)
+    assert result.ok, result.issues
+
+
+def test_iafdb_bank_validates_with_none_threshold(valid_iafdb_bank: Path) -> None:
+    """v1.1 added 'none' to threshold_mode and made threshold_value nullable
+    so producers can export every windowed segment without a healthy filter.
+    Mutate the fixture into the new mode and confirm it still passes the
+    schema. HDF5 doesn't have a native null, so producers using mode='none'
+    stamp NaN for threshold_value; the schema accepts NaN as a number and
+    the validator round-trips it via json.loads."""
+    with h5py.File(valid_iafdb_bank, "r+") as f:
+        f.attrs["threshold_mode"] = "none"
+        del f.attrs["threshold_value"]
+        f.attrs["threshold_value"] = float("nan")
+    result = validate_iafdb_bank(valid_iafdb_bank)
+    assert result.ok, result.issues
+
+
+def test_noise_bank_validates(valid_noise_bank: Path) -> None:
+    result = validate_noise_bank(valid_noise_bank)
+    assert result.ok, result.issues
+
+
+def test_noise_bank_run_record_validates(valid_noise_bank_run_record: Path) -> None:
+    """The slim noise_bank carries only what the mixer consumes; extraction
+    provenance lives in this sibling JSON. Round-trip the fixture through
+    the validator."""
+    result = validate_noise_bank_run_record(valid_noise_bank_run_record)
     assert result.ok, result.issues
 
 
@@ -83,6 +113,22 @@ def test_iafdb_bank_window_samples_mismatch_fails(
         f.attrs["window_samples"] = 999
 
     result = validate_iafdb_bank(valid_iafdb_bank)
+    assert not result
+    assert any("window_samples" in issue for issue in result.issues), result.issues
+
+
+def test_noise_bank_run_record_window_samples_mismatch_fails(
+    valid_noise_bank_run_record: Path,
+) -> None:
+    """The slim noise_bank no longer carries window parameters; the cross-field
+    invariant moved to the run record sidecar. Mutate the run record's
+    window_samples to a value inconsistent with window_ms * fs and confirm
+    the validator catches it."""
+    doc = json.loads(valid_noise_bank_run_record.read_text())
+    doc["windowing"]["window_samples"] = 999
+    valid_noise_bank_run_record.write_text(json.dumps(doc))
+
+    result = validate_noise_bank_run_record(valid_noise_bank_run_record)
     assert not result
     assert any("window_samples" in issue for issue in result.issues), result.issues
 

@@ -87,12 +87,14 @@ Header-only; no compiled library shipped.
 
 ## Schemas
 
-The six formats currently described:
+The eight formats currently described:
 
 | Schema | On-disk format | Producer | Consumer(s) |
 |---|---|---|---|
 | `synthetic_bank` | HDF5 | `synthetic-egm-pipeline` | `egm-data` (converted to ClassifierBank) |
 | `iafdb_bank` | HDF5 | `iafdb-pipeline` | `egm-data` (converted to ClassifierBank), **C++ inference benchmark** |
+| `noise_bank` | HDF5 | `iafdb-pipeline` (any real EGM dataset) | `synthetic-egm-pipeline` mixer |
+| `noise_bank_run_record` | JSON sidecar to noise_bank | `iafdb-pipeline` | reproducibility audits, paper methods |
 | `run_record` | JSON (`run.json`) | `egm-classifier` (training) | `egm-studio`, paper figures |
 | `metrics` | CSV (`metrics.csv`) | `egm-classifier` (training) | `egm-studio`, paper figures |
 | `hybrid_eval_metrics` | JSON (`hybrid_eval_metrics.json`) | `egm-classifier` (hybrid eval) | `egm-studio`, paper figures |

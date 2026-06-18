@@ -10,10 +10,10 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, RootModel
 
 class SchemaVersion(Enum):
     """
-    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions.
+    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions. 1.1 (from 1.0) added: 'none' to threshold_mode enum + nullable threshold_value, for the unfiltered-export path (every window, no healthy threshold). Pre-1.0 of egm-contracts: enum-of-one pattern per project/schema_evolution.md (no in-the-wild back-compat needed yet); when v1.0 ships, this enum may grow to accept multiple supported versions.
     """
 
-    field_1_0 = "1.0"
+    field_1_1 = "1.1"
 
 
 class Source(Enum):
@@ -42,11 +42,12 @@ class CalibrationMethod(Enum):
 
 class ThresholdMode(Enum):
     """
-    Threshold strategy that decided which segments are retained. 'absolute' = fixed mV cap; 'percentile' = per-record percentile of the calibrated p-p distribution.
+    Threshold strategy that decided which segments are retained. 'absolute' = fixed mV cap (default 0.5 per Sánchez 2000, or 0.2 per Kosiuk AF-adjusted); 'percentile' = per-record percentile of the calibrated p-p distribution; 'none' (since 1.1) = no filter applied, every windowed segment retained — used for unsupervised pretraining banks where label semantics don't gate selection.
     """
 
     absolute = "absolute"
     percentile = "percentile"
+    none = "none"
 
 
 class BandHzItem(RootModel[float]):
@@ -113,7 +114,7 @@ class IafdbBank(BaseModel):
     )
     schema_version: SchemaVersion
     """
-    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions.
+    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions. 1.1 (from 1.0) added: 'none' to threshold_mode enum + nullable threshold_value, for the unfiltered-export path (every window, no healthy threshold). Pre-1.0 of egm-contracts: enum-of-one pattern per project/schema_evolution.md (no in-the-wild back-compat needed yet); when v1.0 ships, this enum may grow to accept multiple supported versions.
     """
     created_utc: AwareDatetime
     """
@@ -141,11 +142,11 @@ class IafdbBank(BaseModel):
     """
     threshold_mode: ThresholdMode
     """
-    Threshold strategy that decided which segments are retained. 'absolute' = fixed mV cap; 'percentile' = per-record percentile of the calibrated p-p distribution.
+    Threshold strategy that decided which segments are retained. 'absolute' = fixed mV cap (default 0.5 per Sánchez 2000, or 0.2 per Kosiuk AF-adjusted); 'percentile' = per-record percentile of the calibrated p-p distribution; 'none' (since 1.1) = no filter applied, every windowed segment retained — used for unsupervised pretraining banks where label semantics don't gate selection.
     """
-    threshold_value: float
+    threshold_value: float | None
     """
-    Value used by the threshold strategy. mV for 'absolute' (e.g., 0.5 per Sánchez); 0..100 percentile for 'percentile'.
+    Value used by the threshold strategy. mV for 'absolute' (e.g., 0.5 per Sánchez); 0..100 percentile for 'percentile'; null when threshold_mode='none' (since 1.1).
     """
     band_hz: list[BandHzItem] = Field(..., max_length=2, min_length=2)
     """
