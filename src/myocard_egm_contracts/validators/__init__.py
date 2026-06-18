@@ -30,6 +30,8 @@ from .hybrid_eval_metrics import validate_hybrid_eval_metrics
 from .iafdb_bank import validate_iafdb_bank
 from .metrics import validate_metrics
 from .model_metadata import validate_model_metadata
+from .noise_bank import validate_noise_bank
+from .noise_bank_run_record import validate_noise_bank_run_record
 from .run_record import validate_run_record
 from .synthetic_bank import validate_synthetic_bank
 
@@ -39,6 +41,8 @@ __all__ = [
     "validate_iafdb_bank",
     "validate_metrics",
     "validate_model_metadata",
+    "validate_noise_bank",
+    "validate_noise_bank_run_record",
     "validate_run_record",
     "validate_synthetic_bank",
 ]

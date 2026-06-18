@@ -24,6 +24,8 @@ documentation.
 |---|---|---|
 | [synthetic_bank](synthetic_bank.md) | HDF5 | Synthetic intracardiac EGM bank |
 | [iafdb_bank](iafdb_bank.md) | HDF5 | Calibrated bipolar EGM segments extracted from PhysioNet IAFDB |
+| [noise_bank](noise_bank.md) | HDF5 | Quiet bipolar EGM segments extracted from any real EGM dataset, used as additive noise by the synthetic mixer. Minimal: only what the mixer consumes. |
+| [noise_bank_run_record](noise_bank_run_record.md) | JSON | Provenance sidecar for a noise_bank: calibration, threshold, windowing, per-trace audit. Paired with a noise_bank by name-stem convention. |
 | [run_record](run_record.md) | JSON | Full versioned record of one training run |
 | [metrics](metrics.md) | CSV | Flat per-epoch training metrics |
 | [hybrid_eval_metrics](hybrid_eval_metrics.md) | JSON | Aggregate metrics for a hybrid (mixed sim + real) evaluation |
@@ -50,6 +52,6 @@ For the canonical contract (types, constraints, required fields, etc.), always g
 Two terms recur across the schemas:
 
 - **"Hybrid"** — follows the cardiac-ML convention from Sánchez et al. 2021 (Frontiers in Physiology 12, 699291), where a "hybrid in silico + in vivo" dataset mixes simulated and real recordings. In our schemas, "hybrid" specifically refers to **evaluations** that mix synthetic positives with real IAFDB negatives. A synthetic bank with IAFDB-noise conditioning is *not* called hybrid — the labels are still 100% synthetic.
-- **"Bank"** — a single-file collection of pre-extracted traces ready for training or evaluation. Both synthetic_bank and iafdb_bank are bank formats; both ship as HDF5 with a top-level `traces/` group containing aligned per-trace columns.
+- **"Bank"** — a single-file collection of pre-extracted traces ready for training or evaluation. synthetic_bank, iafdb_bank, and noise_bank are all bank formats; each ships as HDF5 with a top-level `traces/` group containing aligned per-trace columns. noise_bank is the lean variant: it stores only the fields its consumer (the synthetic mixer) reads at run time; extraction methods live in a companion `noise_bank_run_record.json` sidecar.
 
 For evolution rules and developer-facing details on how to safely change a schema, see `project/schema_evolution.md`.

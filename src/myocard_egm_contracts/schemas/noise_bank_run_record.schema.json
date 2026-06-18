@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/noise_bank_run_record.schema.json",
+  "title": "NoiseBankRunRecord",
+  "description": "Provenance sidecar for a NoiseBank HDF5 file: how the noise segments were extracted (calibration, threshold strategy, filter band, windowing) plus per-trace provenance arrays aligned to the bank's traces. Schema version 1.0. Written as a sibling JSON file next to the bank with a matching name stem (e.g. iafdb_noise_v1.h5 + iafdb_noise_v1_run_record.json), following the same convention as metrics.csv + run.json in egm-classifier. The mixer never opens this file; debuggers, reproducibility audits, and the white paper's methods section do.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1.0"],
+      "description": "Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions."
+    },
+    "created_utc": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp captured at write time. Should match (or closely follow) the sibling bank's created_utc."
+    },
+    "source": {
+      "type": "string",
+      "description": "Free-form provenance tag for the upstream dataset, identical to the sibling bank's source field. Producers stamp the same value in both files."
+    },
+    "description": {
+      "type": "string",
+      "description": "Free-form human-readable note about how this bank was built — strategy params, dataset slice, anything that helps a reader reproduce or understand the run. Default empty."
+    },
+    "fs_hz": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Sampling rate in Hz. Mirrors the sibling bank's fs_hz; carried here so the run record stands alone as documentation."
+    },
+    "windowing": {
+      "type": "object",
+      "description": "Sliding-window extraction parameters.",
+      "properties": {
+        "window_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Window length in milliseconds."
+        },
+        "window_samples": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "description": "Window length in samples. Cross-field invariant: window_samples == round(window_ms * 1e-3 * fs_hz)."
+        },
+        "hop_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Stride between adjacent windows in milliseconds."
+        }
+      },
+      "required": ["window_ms", "window_samples", "hop_ms"],
+      "additionalProperties": false
+    },
+    "band_hz": {
+      "type": "array",
+      "items": { "type": "number", "exclusiveMinimum": 0 },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Band-pass filter edges in Hz, [low, high], applied before peak-to-peak computation. Defaults to the clinical 30-300 Hz bipolar EGM band so noise is characterised in the same band the classifier sees."
+    },
+    "calibration": {
+      "type": "object",
+      "description": "How signal amplitude was calibrated before threshold selection.",
+      "properties": {
+        "method": {
+          "type": "string",
+          "description": "Calibration scheme. Open string (not enum) so any source's calibration is representable: 'r_wave_anchoring' (IAFDB), 'none' (raw signal pass-through), 'fixed_gain' (PhysioNet header gain only), future methods. When 'none', peak_to_peak_mv in this file is in raw signal units rather than mV."
+        },
+        "target_qrs_pp_mv": {
+          "type": ["number", "null"],
+          "description": "Target peak-to-peak QRS amplitude in mV against which each source record was calibrated. Null when method has no notion of a target (e.g., 'none' or 'fixed_gain')."
+        }
+      },
+      "required": ["method", "target_qrs_pp_mv"],
+      "additionalProperties": false
+    },
+    "selection": {
+      "type": "object",
+      "description": "Threshold strategy used to select quiet windows.",
+      "properties": {
+        "threshold_mode": {
+          "type": "string",
+          "enum": ["absolute", "percentile"],
+          "description": "Strategy. 'absolute' = keep windows with peak-to-peak ≤ threshold_value mV (requires calibrated input). 'percentile' = keep windows in the bottom threshold_value%% of the pooled per-record p-p distribution (scale-invariant)."
+        },
+        "threshold_value": {
+          "type": "number",
+          "description": "mV for 'absolute'; 0..100 percentile for 'percentile'."
+        }
+      },
+      "required": ["threshold_mode", "threshold_value"],
+      "additionalProperties": false
+    },
+    "source_records": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Record names from the upstream dataset that contributed at least one segment to the bank (e.g., 'iaf1_afw'). Allows zero entries (empty bank is valid)."
+    },
+    "per_trace_provenance": {
+      "type": "object",
+      "description": "Optional parallel arrays of per-trace audit fields aligned to the bank's traces (index i here corresponds to bank traces row i). Producers SHOULD write this for any bank intended for paper-citable use; smaller test fixtures may omit it. Consumers that need patient-aware sampling or unit-aware mixing read these arrays; the v1 mixer ignores them entirely.",
+      "properties": {
+        "patient_id": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "(N,) Source-dataset patient identifier for each trace. No pattern constraint."
+        },
+        "start_sample": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 },
+          "description": "(N,) Sample offset of the segment in its source record. Combined with patient_id + the bank's source_record + windowing.window_samples, uniquely identifies the trace's location in the raw source data."
+        },
+        "peak_to_peak_mv": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 0 },
+          "description": "(N,) Band-passed peak-to-peak amplitude that passed the threshold. Real mV when calibration.method calibrated the input; raw signal units when calibration.method='none'."
+        },
+        "calibration_scalar": {
+          "type": "array",
+          "items": { "type": "number" },
+          "description": "(N,) Per-record calibration scalar applied to this segment. signal_in_mv = signal_raw * calibration_scalar. When calibration.method='none' producers SHOULD write 1.0 here so consumers don't accidentally rescale."
+        }
+      },
+      "required": ["patient_id", "start_sample", "peak_to_peak_mv", "calibration_scalar"],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version", "created_utc", "source", "fs_hz",
+    "windowing", "band_hz", "calibration", "selection", "source_records"
+  ],
+  "additionalProperties": false
+}
