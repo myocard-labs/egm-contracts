@@ -23,14 +23,16 @@ def test_version_is_pep440() -> None:
 
 
 def test_generated_models_are_present() -> None:
-    """All six schema modules should be importable after codegen runs."""
+    """All eight schema modules should be importable after codegen runs."""
     expected = [
+        "egm_class_model_metadata",
         "hybrid_eval_metrics",
         "iafdb_bank",
-        "metrics",
-        "model_metadata",
-        "run_record",
+        "noise_bank",
+        "noise_bank_run_record",
         "synthetic_bank",
+        "training_metrics",
+        "training_run_record",
     ]
     for name in expected:
         mod = getattr(myocard_egm_contracts, name)

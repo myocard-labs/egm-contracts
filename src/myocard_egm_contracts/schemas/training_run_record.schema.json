@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/run_record.schema.json",
-  "title": "RunRecord",
-  "description": "Versioned full-fidelity record of one training run, written to run.json. Schema version 1.0. All non-finite floats are emitted as null so the JSON stays strictly valid.",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/training_run_record.schema.json",
+  "title": "TrainingRunRecord",
+  "description": "Versioned full-fidelity record of one ML training run, written to run.json. Schema version 1.0. Captures run-level metadata, the resolved training configuration, per-epoch records (each with its reliability bins), the best epoch by the configured selection metric, and an optional held-out test block. All non-finite floats are emitted as null so the JSON stays strictly valid. Renamed from 'run_record' at egm-contracts v0.3.0 to leave naming room for future per-activity run records (e.g. inference_run_record, hybrid_eval_run_record); the convention matches noise_bank_run_record (extraction-side).",
   "type": "object",
   "properties": {
     "schema_version": {
@@ -33,6 +33,19 @@
       }
     },
     "best": {
+      "$ref": "#/$defs/BestEpoch",
+      "description": "Summary of the best epoch by the configured selection metric."
+    },
+    "test": {
+      "$ref": "#/$defs/HeldOutTest",
+      "description": "Held-out test metrics, present iff a test split was evaluated."
+    }
+  },
+  "required": ["schema_version", "created_utc", "run", "config", "epochs", "best"],
+  "additionalProperties": false,
+  "$defs": {
+    "BestEpoch": {
+      "title": "BestEpoch",
       "type": "object",
       "description": "Summary of the best epoch by the configured selection metric.",
       "properties": {
@@ -52,9 +65,10 @@
       },
       "additionalProperties": false
     },
-    "test": {
+    "HeldOutTest": {
+      "title": "HeldOutTest",
       "type": "object",
-      "description": "Held-out test metrics, present iff a test split was evaluated.",
+      "description": "Held-out test metrics block (loss + scalar metrics + reliability bins). Present in a TrainingRunRecord iff a test split was evaluated at the end of training.",
       "properties": {
         "loss": {
           "type": ["number", "null"],
@@ -78,11 +92,7 @@
         }
       },
       "additionalProperties": false
-    }
-  },
-  "required": ["schema_version", "created_utc", "run", "config", "epochs", "best"],
-  "additionalProperties": false,
-  "$defs": {
+    },
     "EpochRecord": {
       "type": "object",
       "description": "Full per-epoch record: scalar losses, scalar metrics, calibration bins.",

@@ -1,4 +1,4 @@
-"""Validate a metrics.csv file against metrics.schema.json (row by row)."""
+"""Validate a metrics.csv file against training_metrics.schema.json (row by row)."""
 
 from __future__ import annotations
 
@@ -37,8 +37,8 @@ def _coerce_row(row: dict[str, str]) -> dict[str, object]:
     return out
 
 
-def validate_metrics(path: Path | str) -> ValidationResult:
-    """Open metrics.csv and check every row against the schema."""
+def validate_training_metrics(path: Path | str) -> ValidationResult:
+    """Open metrics.csv and check every row against the training_metrics schema."""
     path = Path(path)
     if not path.exists():
         return ValidationResult.failing(path, [f"file not found: {path}"])
@@ -47,7 +47,7 @@ def validate_metrics(path: Path | str) -> ValidationResult:
     try:
         with path.open(newline="", encoding="utf-8") as f:
             reader = csv.DictReader(f)
-            validator = _validator_for("metrics")
+            validator = _validator_for("training_metrics")
             for row_number, row in enumerate(reader, start=1):
                 doc = _coerce_row(row)
                 for err in validator.iter_errors(doc):

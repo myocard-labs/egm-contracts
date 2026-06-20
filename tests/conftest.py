@@ -201,7 +201,7 @@ def valid_synthetic_bank(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def valid_run_record(tmp_path: Path) -> Path:
+def valid_training_run_record(tmp_path: Path) -> Path:
     """Write a tiny valid run.json and return its path."""
     path = tmp_path / "run.json"
     doc: dict[str, Any] = {
@@ -235,7 +235,7 @@ def valid_run_record(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def valid_metrics_csv(tmp_path: Path) -> Path:
+def valid_training_metrics_csv(tmp_path: Path) -> Path:
     """Write a tiny valid metrics.csv and return its path."""
     path = tmp_path / "metrics.csv"
     columns = [
@@ -313,8 +313,8 @@ def valid_hybrid_eval_metrics(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def valid_model_metadata(tmp_path: Path) -> Path:
-    """Write a tiny valid model_metadata.json sidecar and return its path."""
+def valid_egm_class_model_metadata(tmp_path: Path) -> Path:
+    """Write a tiny valid egm_class_model_metadata JSON sidecar and return its path."""
     path = tmp_path / "best.model_metadata.json"
     doc: dict[str, Any] = {
         "schema_version": "1.0",

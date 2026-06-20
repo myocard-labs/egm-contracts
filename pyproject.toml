@@ -17,7 +17,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "myocard-egm-contracts"
-version = "0.2.0"
+version = "0.3.0"
 description = "Cross-language schemas + validators for the myocard-labs intracardiac EGM data formats."
 readme = "README.md"
 license = { file = "LICENSE" }

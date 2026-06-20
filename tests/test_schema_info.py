@@ -27,9 +27,9 @@ def test_supported_versions_returns_enum_for_each_schema() -> None:
         "iafdb_bank",
         "noise_bank",
         "noise_bank_run_record",
-        "run_record",
+        "training_run_record",
         "hybrid_eval_metrics",
-        "model_metadata",
+        "egm_class_model_metadata",
     ):
         versions = supported_versions(name)
         assert len(versions) >= 1, f"{name} has no schema_version enum"
@@ -43,13 +43,13 @@ def test_current_version_is_the_last_supported() -> None:
     assert current_version("synthetic_bank") == versions[-1]
 
 
-def test_metrics_has_no_schema_version() -> None:
-    """metrics.schema.json describes one row of a CSV, not a versioned
-    document; it has no schema_version field. supported_versions should
-    return an empty tuple and current_version should raise."""
-    assert supported_versions("metrics") == ()
+def test_training_metrics_has_no_schema_version() -> None:
+    """training_metrics.schema.json describes one row of a CSV, not a
+    versioned document; it has no schema_version field. supported_versions
+    should return an empty tuple and current_version should raise."""
+    assert supported_versions("training_metrics") == ()
     with pytest.raises(ValueError, match="has no schema_version field"):
-        current_version("metrics")
+        current_version("training_metrics")
 
 
 # ---------------------------------------------------------------------------
@@ -57,11 +57,11 @@ def test_metrics_has_no_schema_version() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_metrics_csv_column_order_falls_back_to_properties() -> None:
-    """metrics.schema.json has no x-csv-column-order extension; the helper
-    falls back to the properties insertion order. Confirms the fallback
-    path works."""
-    columns = csv_column_order("metrics")
+def test_training_metrics_csv_column_order_falls_back_to_properties() -> None:
+    """training_metrics.schema.json has no x-csv-column-order extension;
+    the helper falls back to the properties insertion order. Confirms
+    the fallback path works."""
+    columns = csv_column_order("training_metrics")
     assert columns[0] == "epoch"
     assert "val_auroc" in columns
 
@@ -71,11 +71,12 @@ def test_metrics_csv_column_order_falls_back_to_properties() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_metrics_required_columns() -> None:
-    """The metrics schema marks epoch / lr / train_loss / val_loss /
-    epoch_seconds as required and non-nullable. csv_required_columns
-    returns that set so readers can refuse a malformed row."""
-    required = csv_required_columns("metrics")
+def test_training_metrics_required_columns() -> None:
+    """The training_metrics schema marks epoch / lr / train_loss /
+    val_loss / epoch_seconds as required and non-nullable.
+    csv_required_columns returns that set so readers can refuse a
+    malformed row."""
+    required = csv_required_columns("training_metrics")
     assert {"epoch", "lr", "train_loss", "val_loss", "epoch_seconds"}.issubset(required)
 
 
@@ -84,7 +85,7 @@ def test_field_type_map_normalizes_nullable_types() -> None:
     returns both elements as a tuple. epoch is just "integer" and returns
     a one-tuple. Catches a regression where a nullable column gets coerced
     to non-nullable."""
-    types = field_type_map("metrics")
+    types = field_type_map("training_metrics")
     assert types["epoch"] == ("integer",)
     assert "null" in types["val_auroc"]
     assert "number" in types["val_auroc"]

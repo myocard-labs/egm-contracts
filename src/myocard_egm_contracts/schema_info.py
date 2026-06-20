@@ -59,7 +59,8 @@ def get_schema(name: str) -> dict[str, Any]:
     """Load and return the raw JSON Schema dict for ``name``.
 
     ``name`` is the schema's base filename without the ``.schema.json``
-    suffix — e.g. ``"synthetic_bank"``, ``"run_record"``, ``"predictions"``.
+    suffix — e.g. ``"synthetic_bank"``, ``"training_run_record"``,
+    ``"egm_class_model_metadata"``.
 
     Raises FileNotFoundError if no schema by that name ships in the wheel.
     Result is cached; the schemas are static.

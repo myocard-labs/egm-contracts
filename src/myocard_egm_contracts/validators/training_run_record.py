@@ -1,4 +1,4 @@
-"""Validate a model_metadata JSON sidecar against model_metadata.schema.json."""
+"""Validate a run.json file against training_run_record.schema.json."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from ._result import ValidationResult
 from ._schema import validate_doc_against
 
 
-def validate_model_metadata(path: Path | str) -> ValidationResult:
-    """Open a model_metadata.json sidecar and check it against the schema."""
+def validate_training_run_record(path: Path | str) -> ValidationResult:
+    """Open run.json and check it against the training_run_record schema."""
     path = Path(path)
     if not path.exists():
         return ValidationResult.failing(path, [f"file not found: {path}"])
@@ -20,4 +20,4 @@ def validate_model_metadata(path: Path | str) -> ValidationResult:
     except json.JSONDecodeError as e:
         return ValidationResult.failing(path, [f"JSON parse failed: {e}"])
 
-    return validate_doc_against(doc, "model_metadata", path)
+    return validate_doc_against(doc, "training_run_record", path)

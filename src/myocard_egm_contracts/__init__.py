@@ -41,24 +41,24 @@ from importlib import metadata
 # clone, run ``pip install -e ".[dev]" && python codegen/gen_python.py``.
 try:
     from myocard_egm_contracts._generated.python import (
+        egm_class_model_metadata,
         hybrid_eval_metrics,
         iafdb_bank,
-        metrics,
-        model_metadata,
         noise_bank,
         noise_bank_run_record,
-        run_record,
         synthetic_bank,
+        training_metrics,
+        training_run_record,
     )
 except ImportError:  # pragma: no cover — happens only before first codegen run
+    egm_class_model_metadata = None  # type: ignore[assignment]
     hybrid_eval_metrics = None  # type: ignore[assignment]
     iafdb_bank = None  # type: ignore[assignment]
-    metrics = None  # type: ignore[assignment]
-    model_metadata = None  # type: ignore[assignment]
     noise_bank = None  # type: ignore[assignment]
     noise_bank_run_record = None  # type: ignore[assignment]
-    run_record = None  # type: ignore[assignment]
     synthetic_bank = None  # type: ignore[assignment]
+    training_metrics = None  # type: ignore[assignment]
+    training_run_record = None  # type: ignore[assignment]
 
 # Re-export the validators so consumers can `from myocard_egm_contracts
 # import validate_synthetic_bank` without knowing about the subpackage.
@@ -75,14 +75,14 @@ from myocard_egm_contracts.schema_info import (
 )
 from myocard_egm_contracts.validators import (
     ValidationResult,
+    validate_egm_class_model_metadata,
     validate_hybrid_eval_metrics,
     validate_iafdb_bank,
-    validate_metrics,
-    validate_model_metadata,
     validate_noise_bank,
     validate_noise_bank_run_record,
-    validate_run_record,
     validate_synthetic_bank,
+    validate_training_metrics,
+    validate_training_run_record,
 )
 
 try:
@@ -97,23 +97,23 @@ __all__ = [
     "csv_column_order",
     "csv_required_columns",
     "current_version",
+    "egm_class_model_metadata",
     "field_type_map",
     "get_schema",
     "hybrid_eval_metrics",
     "iafdb_bank",
-    "metrics",
-    "model_metadata",
     "noise_bank",
     "noise_bank_run_record",
-    "run_record",
     "supported_versions",
     "synthetic_bank",
+    "training_metrics",
+    "training_run_record",
+    "validate_egm_class_model_metadata",
     "validate_hybrid_eval_metrics",
     "validate_iafdb_bank",
-    "validate_metrics",
-    "validate_model_metadata",
     "validate_noise_bank",
     "validate_noise_bank_run_record",
-    "validate_run_record",
     "validate_synthetic_bank",
+    "validate_training_metrics",
+    "validate_training_run_record",
 ]
