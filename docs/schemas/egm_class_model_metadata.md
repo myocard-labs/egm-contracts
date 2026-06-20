@@ -1,4 +1,4 @@
-# model_metadata
+# egm_class_model_metadata
 
 ## What it is
 

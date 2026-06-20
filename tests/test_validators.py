@@ -12,14 +12,14 @@ from pathlib import Path
 import h5py
 
 from myocard_egm_contracts.validators import (
+    validate_egm_class_model_metadata,
     validate_hybrid_eval_metrics,
     validate_iafdb_bank,
-    validate_metrics,
-    validate_model_metadata,
     validate_noise_bank,
     validate_noise_bank_run_record,
-    validate_run_record,
     validate_synthetic_bank,
+    validate_training_metrics,
+    validate_training_run_record,
 )
 
 # ---------------------------------------------------------------------------
@@ -65,13 +65,13 @@ def test_synthetic_bank_validates(valid_synthetic_bank: Path) -> None:
     assert result.ok, result.issues
 
 
-def test_run_record_validates(valid_run_record: Path) -> None:
-    result = validate_run_record(valid_run_record)
+def test_training_run_record_validates(valid_training_run_record: Path) -> None:
+    result = validate_training_run_record(valid_training_run_record)
     assert result.ok, result.issues
 
 
-def test_metrics_csv_validates(valid_metrics_csv: Path) -> None:
-    result = validate_metrics(valid_metrics_csv)
+def test_training_metrics_csv_validates(valid_training_metrics_csv: Path) -> None:
+    result = validate_training_metrics(valid_training_metrics_csv)
     assert result.ok, result.issues
 
 
@@ -80,8 +80,8 @@ def test_hybrid_eval_metrics_validates(valid_hybrid_eval_metrics: Path) -> None:
     assert result.ok, result.issues
 
 
-def test_model_metadata_validates(valid_model_metadata: Path) -> None:
-    result = validate_model_metadata(valid_model_metadata)
+def test_egm_class_model_metadata_validates(valid_egm_class_model_metadata: Path) -> None:
+    result = validate_egm_class_model_metadata(valid_egm_class_model_metadata)
     assert result.ok, result.issues
 
 
@@ -91,7 +91,7 @@ def test_model_metadata_validates(valid_model_metadata: Path) -> None:
 
 
 def test_missing_file_fails_with_clear_message(tmp_path: Path) -> None:
-    result = validate_run_record(tmp_path / "does_not_exist.json")
+    result = validate_training_run_record(tmp_path / "does_not_exist.json")
     assert not result
     assert "file not found" in result.issues[0]
 
@@ -99,7 +99,7 @@ def test_missing_file_fails_with_clear_message(tmp_path: Path) -> None:
 def test_malformed_json_fails(tmp_path: Path) -> None:
     bad = tmp_path / "bad.json"
     bad.write_text("{not valid json", encoding="utf-8")
-    result = validate_run_record(bad)
+    result = validate_training_run_record(bad)
     assert not result
     assert "JSON parse failed" in result.issues[0]
 
@@ -133,15 +133,15 @@ def test_noise_bank_run_record_window_samples_mismatch_fails(
     assert any("window_samples" in issue for issue in result.issues), result.issues
 
 
-def test_run_record_missing_required_field_fails(
-    valid_run_record: Path,
+def test_training_run_record_missing_required_field_fails(
+    valid_training_run_record: Path,
 ) -> None:
     """JSON Schema should fail when a required field is dropped."""
-    doc = json.loads(valid_run_record.read_text())
+    doc = json.loads(valid_training_run_record.read_text())
     del doc["best"]  # required
-    valid_run_record.write_text(json.dumps(doc))
+    valid_training_run_record.write_text(json.dumps(doc))
 
-    result = validate_run_record(valid_run_record)
+    result = validate_training_run_record(valid_training_run_record)
     assert not result
     assert any("best" in issue for issue in result.issues), result.issues
 
@@ -158,18 +158,20 @@ def test_synthetic_bank_wrong_schema_version_fails(
     assert any("schema_version" in issue for issue in result.issues), result.issues
 
 
-def test_model_metadata_invalid_sha256_fails(valid_model_metadata: Path) -> None:
+def test_egm_class_model_metadata_invalid_sha256_fails(
+    valid_egm_class_model_metadata: Path,
+) -> None:
     """Pattern constraint should reject malformed sha256 strings."""
-    doc = json.loads(valid_model_metadata.read_text())
+    doc = json.loads(valid_egm_class_model_metadata.read_text())
     doc["model_artifact"]["sha256"] = "not-a-real-hash"
-    valid_model_metadata.write_text(json.dumps(doc))
+    valid_egm_class_model_metadata.write_text(json.dumps(doc))
 
-    result = validate_model_metadata(valid_model_metadata)
+    result = validate_egm_class_model_metadata(valid_egm_class_model_metadata)
     assert not result
     assert any("sha256" in issue for issue in result.issues), result.issues
 
 
-def test_metrics_csv_null_required_field_fails(tmp_path: Path) -> None:
+def test_training_metrics_csv_null_required_field_fails(tmp_path: Path) -> None:
     """epoch_seconds is required and non-null per the v1.0 schema."""
     path = tmp_path / "metrics.csv"
     path.write_text(
@@ -179,6 +181,6 @@ def test_metrics_csv_null_required_field_fails(tmp_path: Path) -> None:
         encoding="utf-8",
     )
 
-    result = validate_metrics(path)
+    result = validate_training_metrics(path)
     assert not result
     assert any("epoch_seconds" in issue for issue in result.issues), result.issues

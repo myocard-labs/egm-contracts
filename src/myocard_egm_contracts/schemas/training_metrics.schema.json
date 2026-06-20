@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/metrics.schema.json",
-  "title": "MetricsRow",
-  "description": "Flat per-epoch training metrics, one row per epoch in metrics.csv. Column order is the contract (consumers read by header name, but plot/spreadsheet defaults assume this order). The CSV writes empty cells for non-finite values; the JSON representation of a row treats those as null. Schema describes one row. Validity rule: epoch / lr / train_loss / val_loss / epoch_seconds are always present and finite — if a producer writes them as null/empty, that's a producer bug worth surfacing. Validation metrics (val_auroc / val_accuracy / etc.) are legitimately nullable: AUROC is undefined on a single-class val split, ECE is undefined when no reliability bin contains samples, etc.",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/training_metrics.schema.json",
+  "title": "TrainingMetricsRow",
+  "description": "Flat per-epoch training metrics, one row per epoch in metrics.csv. Column order is the contract (consumers read by header name, but plot/spreadsheet defaults assume this order). The CSV writes empty cells for non-finite values; the JSON representation of a row treats those as null. Schema describes one row. Validity rule: epoch / lr / train_loss / val_loss / epoch_seconds are always present and finite — if a producer writes them as null/empty, that's a producer bug worth surfacing. Validation metrics (val_auroc / val_accuracy / etc.) are legitimately nullable: AUROC is undefined on a single-class val split, ECE is undefined when no reliability bin contains samples, etc. Renamed from 'metrics' at egm-contracts v0.3.0 — parallel to TrainingRunRecord. Future per-activity metric tables get their own schemas (hybrid_eval_metrics already exists).",
   "type": "object",
   "properties": {
     "epoch": {

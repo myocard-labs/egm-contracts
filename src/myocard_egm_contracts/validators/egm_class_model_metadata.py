@@ -1,4 +1,4 @@
-"""Validate a run.json file against run_record.schema.json."""
+"""Validate a model metadata JSON sidecar against egm_class_model_metadata.schema.json."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from ._result import ValidationResult
 from ._schema import validate_doc_against
 
 
-def validate_run_record(path: Path | str) -> ValidationResult:
-    """Open run.json and check it against the schema."""
+def validate_egm_class_model_metadata(path: Path | str) -> ValidationResult:
+    """Open an EGM-classifier model_metadata.json sidecar and check the schema."""
     path = Path(path)
     if not path.exists():
         return ValidationResult.failing(path, [f"file not found: {path}"])
@@ -20,4 +20,4 @@ def validate_run_record(path: Path | str) -> ValidationResult:
     except json.JSONDecodeError as e:
         return ValidationResult.failing(path, [f"JSON parse failed: {e}"])
 
-    return validate_doc_against(doc, "run_record", path)
+    return validate_doc_against(doc, "egm_class_model_metadata", path)

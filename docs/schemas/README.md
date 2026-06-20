@@ -26,10 +26,10 @@ documentation.
 | [iafdb_bank](iafdb_bank.md) | HDF5 | Calibrated bipolar EGM segments extracted from PhysioNet IAFDB |
 | [noise_bank](noise_bank.md) | HDF5 | Quiet bipolar EGM segments extracted from any real EGM dataset, used as additive noise by the synthetic mixer. Minimal: only what the mixer consumes. |
 | [noise_bank_run_record](noise_bank_run_record.md) | JSON | Provenance sidecar for a noise_bank: calibration, threshold, windowing, per-trace audit. Paired with a noise_bank by name-stem convention. |
-| [run_record](run_record.md) | JSON | Full versioned record of one training run |
-| [metrics](metrics.md) | CSV | Flat per-epoch training metrics |
+| [training_run_record](training_run_record.md) | JSON | Full versioned record of one ML training run |
+| [training_metrics](training_metrics.md) | CSV | Flat per-epoch training metrics |
 | [hybrid_eval_metrics](hybrid_eval_metrics.md) | JSON | Aggregate metrics for a hybrid (mixed sim + real) evaluation |
-| [model_metadata](model_metadata.md) | JSON | Preprocessing + inference constants paired with a model artifact |
+| [egm_class_model_metadata](egm_class_model_metadata.md) | JSON | Preprocessing + inference constants paired with a deployed 1-D EGM-classifier model artifact |
 
 ---
 

@@ -1,4 +1,4 @@
-# run_record
+# training_run_record
 
 ## What it is
 
