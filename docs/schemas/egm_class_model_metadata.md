@@ -87,10 +87,21 @@ listed:
 - **`expected_trace_samples`** — per-trace length in samples.
   Must equal the time-axis dimension in `input.shape`.
 - **`bandpass_hz`** — `[low, high]` band-pass filter edges in Hz.
-- **`normalization`** — per-channel signal normalization. Object:
-  - `scheme` — `"zscore"`, `"minmax"`, or `"none"`.
-  - `mean` / `std` — arrays of length equal to input channel
-    count. Required for `"zscore"`.
+- **`normalization`** — per-trace signal normalization. Object:
+  - `scheme` — one of:
+    - `"zscore"` — subtract the trace's mean and divide by its
+      standard deviation. Suits approximately-Gaussian signals and
+      is what the v1 classifier trains with.
+    - `"zero2one"` — min-max rescale each trace so its minimum
+      maps to 0.0 and its maximum to 1.0. Useful when amplitude
+      bounds are meaningful and the distribution is non-Gaussian.
+    - `"none"` — pass the raw trace through unchanged. Use only
+      when the producer pipeline has already normalized upstream.
+
+  All three schemes are computed per-trace from each trace's own
+  samples; there are no global or per-channel statistics in this
+  schema. Any sensor- or hardware-level normalization (e.g. ADC-gain
+  correction) is expected to have happened upstream of this contract.
 
 ### decision
 
@@ -114,15 +125,20 @@ Additional producer-defined keys allowed.
 
 ## Versioning
 
-Currently `1.0`. Bump
-triggers:
+Currently `1.1`. Bump triggers:
 
 - Adding required preprocessing steps (e.g., a notch filter).
 - Multi-class extensions to `decision` (per-class thresholds).
 - Multi-input models needing an `inputs[]` array rather than a
   single `input` object.
-- Changing normalization semantics (e.g., per-window adaptive
-  rather than per-channel-statistics).
+- Adding new entries to the `normalization.scheme` enum, or
+  re-introducing per-channel/global normalization parameters for
+  model topologies that need them.
+
+Per-version change history lives in
+[`project/schema_evolution.md`](../../project/schema_evolution.md)
+under "Schema change log" — see that file for what changed when
+and why.
 
 ## Where this is used
 
@@ -137,7 +153,7 @@ runtime-specific) artifacts. Consumed by:
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "created_utc": "2026-06-11T22:30:00Z",
   "model_artifact": {
     "filename": "best.onnx",
@@ -161,9 +177,7 @@ runtime-specific) artifacts. Consumed by:
     "expected_trace_samples": 512,
     "bandpass_hz": [30.0, 300.0],
     "normalization": {
-      "scheme": "zscore",
-      "mean": [0.0],
-      "std": [0.42]
+      "scheme": "zscore"
     }
   },
   "decision": {

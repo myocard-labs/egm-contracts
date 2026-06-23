@@ -14,7 +14,7 @@ class SchemaVersion(Enum):
     Versioned schema identifier. Consumers MUST refuse unknown major versions.
     """
 
-    field_1_0 = "1.0"
+    field_1_1 = "1.1"
 
 
 class Framework(Enum):
@@ -73,24 +73,17 @@ class BandpassHzItem(RootModel[float]):
 
 class Scheme(Enum):
     """
-    Normalization scheme.
+    Normalization scheme applied per trace. 'zscore' = subtract the trace's mean and divide by its standard deviation (suits approximately-Gaussian signals; what the v1 classifier trains with). 'zero2one' = min-max rescale so the trace's minimum maps to 0.0 and maximum to 1.0 (useful when amplitude bounds are meaningful and the distribution is non-Gaussian). 'none' = pass the raw trace through unchanged (use only when the producer pipeline has already normalized upstream).
     """
 
     zscore = "zscore"
-    minmax = "minmax"
+    zero2one = "zero2one"
     none = "none"
-
-
-class StdItem(RootModel[float]):
-    root: float = Field(..., gt=0.0)
-    """
-    Per-channel standard deviation applied as the scaling divisor during normalization. Must be strictly positive.
-    """
 
 
 class Normalization(BaseModel):
     """
-    Per-channel signal normalization. For a 1-channel bipolar model the arrays are length 1. The scheme determines which fields are required: 'zscore' needs mean+std; 'minmax' would need min+max (add in a future schema version); 'none' needs neither.
+    Per-trace signal normalization applied at inference time. The v1 classifier consumes one bipolar trace per forward pass, so all schemes are computed from each trace's own samples — no global or per-channel statistics are recorded here. Any sensor- or hardware-level normalization (e.g. ADC-gain correction) is expected to happen upstream of this contract.
     """
 
     model_config = ConfigDict(
@@ -98,15 +91,7 @@ class Normalization(BaseModel):
     )
     scheme: Scheme
     """
-    Normalization scheme.
-    """
-    mean: list[float] | None = None
-    """
-    Per-channel mean (required for 'zscore'). Length must equal the input channel count.
-    """
-    std: list[StdItem] | None = None
-    """
-    Per-channel standard deviation (required for 'zscore'). Length must equal the input channel count.
+    Normalization scheme applied per trace. 'zscore' = subtract the trace's mean and divide by its standard deviation (suits approximately-Gaussian signals; what the v1 classifier trains with). 'zero2one' = min-max rescale so the trace's minimum maps to 0.0 and maximum to 1.0 (useful when amplitude bounds are meaningful and the distribution is non-Gaussian). 'none' = pass the raw trace through unchanged (use only when the producer pipeline has already normalized upstream).
     """
 
 
@@ -132,7 +117,7 @@ class Preprocessing(BaseModel):
     """
     normalization: Normalization
     """
-    Per-channel signal normalization. For a 1-channel bipolar model the arrays are length 1. The scheme determines which fields are required: 'zscore' needs mean+std; 'minmax' would need min+max (add in a future schema version); 'none' needs neither.
+    Per-trace signal normalization applied at inference time. The v1 classifier consumes one bipolar trace per forward pass, so all schemes are computed from each trace's own samples — no global or per-channel statistics are recorded here. Any sensor- or hardware-level normalization (e.g. ADC-gain correction) is expected to happen upstream of this contract.
     """
 
 
@@ -177,7 +162,7 @@ class Input(BaseModel):
     """
     shape: list[int | str]
     """
-    Tensor shape. Integer for fixed dims, '?' (string) for dynamic dims (typically the batch axis). Example for a 1D 1-channel single-trace model: ['?', 1, 512].
+    Tensor shape. Integer for fixed dims, '?' (string) for dynamic dims. Example for the v1 EGM classifier: ['?', 1, 512] — dynamic batch axis, channel axis fixed at 1 (PyTorch Conv1d expects [batch, channels, length]; a single bipolar trace is one channel), trace length fixed at 512 samples. Keep the batch axis dynamic so the same ONNX serves both real-time scoring (batch=1) and offline bulk inference (batch=N) without re-export.
     """
     dtype: Dtype
     """
@@ -213,7 +198,7 @@ class Output(BaseModel):
 
 class EgmClassModelMetadata(BaseModel):
     """
-    Preprocessing + inference-time constants paired with a deployed EGM-classifier model artifact (typically the ONNX file). Captures everything the runtime needs that is NOT encoded in the ONNX graph itself: expected sample rate, expected trace length, per-channel normalization, decision threshold, model artifact hash, training provenance. Cross-language: consumed by Python (training-eval parity) and C++ (TensorRT inference). Schema version 1.0. Renamed from 'model_metadata' at egm-contracts v0.3.0 — the field shape here (binary_logit semantics, 1-channel bandpass, [B, 1, T] input) is specific to the 1D EGM-classifier family. Future model topologies (2D electrode grids, sparse 3D electrode point clouds) get their own schemas.
+    Preprocessing + inference-time constants paired with a deployed EGM-classifier model artifact (typically the ONNX file). Captures everything the runtime needs that is NOT encoded in the ONNX graph itself: expected sample rate, expected trace length, per-trace normalization scheme, decision threshold, model artifact hash, training provenance. Cross-language: consumed by Python (training-eval parity) and C++ (TensorRT inference). The field shape here (binary_logit semantics, single bipolar input, [batch, 1, T] tensor) is specific to the 1D EGM-classifier family — the middle '1' is the channel axis required by PyTorch Conv1d, not a multi-channel slot. Future model topologies (2D electrode grids, sparse 3D electrode point clouds) get their own schemas.
     """
 
     model_config = ConfigDict(

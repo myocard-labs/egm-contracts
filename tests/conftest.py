@@ -317,7 +317,7 @@ def valid_egm_class_model_metadata(tmp_path: Path) -> Path:
     """Write a tiny valid egm_class_model_metadata JSON sidecar and return its path."""
     path = tmp_path / "best.model_metadata.json"
     doc: dict[str, Any] = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "created_utc": "2026-06-15T22:00:00Z",
         "model_artifact": {"filename": "best.onnx", "framework": "onnx"},
         "input": {"name": "signal", "shape": ["?", 1, 512], "dtype": "float32"},
@@ -331,7 +331,7 @@ def valid_egm_class_model_metadata(tmp_path: Path) -> Path:
             "expected_fs_hz": 1000.0,
             "expected_trace_samples": 512,
             "bandpass_hz": [30.0, 300.0],
-            "normalization": {"scheme": "zscore", "mean": [0.0], "std": [0.42]},
+            "normalization": {"scheme": "zscore"},
         },
         "decision": {"threshold": 0.5, "class_labels": ["healthy", "fibrotic"]},
         "training_provenance": {"run_id": "test_run"},
