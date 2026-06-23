@@ -17,7 +17,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "myocard-egm-contracts"
-version = "0.3.0"
+version = "0.4.0"
 description = "Cross-language schemas + validators for the myocard-labs intracardiac EGM data formats."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -42,7 +42,7 @@ classifiers = [
 dependencies = [
   "h5py>=3.10",
   "jsonschema>=4.20",
-  "numpy>=1.26",
+  "numpy>=1.26,<2.5",
   "pydantic>=2.5",
 ]
 

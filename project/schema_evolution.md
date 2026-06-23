@@ -205,6 +205,32 @@ bump the version.
 
 ---
 
+## Schema change log
+
+Per-schema version history. Add a one-line entry under the relevant
+schema each time you bump its `schema_version`. Each entry records
+*what changed* and *why* — the actual mechanics (codegen, tests,
+docs) are covered in the "Mechanics" sections above.
+
+Schemas only appear here once they've had their first bump beyond
+`1.0`; an absence from this list means the schema is still at its
+introduction version.
+
+### egm_class_model_metadata
+
+- **1.1** — egm-contracts v0.4.0. Dropped per-channel `mean` /
+  `std` arrays from `preprocessing.normalization`; switched the
+  `normalization.scheme` enum from `{zscore, minmax, none}` to
+  `{zscore, zero2one, none}`, all computed per-trace. Rationale:
+  the v1 classifier consumes one bipolar trace per forward pass,
+  so per-channel statistics aren't a meaningful concept; any
+  sensor- or hardware-level calibration is expected upstream of
+  this contract.
+- **1.0** — egm-contracts v0.3.0. Initial release of this schema
+  (renamed from `model_metadata`).
+
+---
+
 ## Post-1.0 of egm-contracts (deferred)
 
 When egm-contracts the package hits its own v1.0, schema-version
