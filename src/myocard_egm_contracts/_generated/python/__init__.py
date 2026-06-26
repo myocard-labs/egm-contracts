@@ -6,7 +6,6 @@ Do not edit by hand. Regenerate via ``python codegen/gen_python.py``.
 from __future__ import annotations
 
 from . import egm_class_model_metadata  # noqa: F401
-from . import hybrid_eval_metrics  # noqa: F401
 from . import iafdb_bank  # noqa: F401
 from . import noise_bank  # noqa: F401
 from . import noise_bank_run_record  # noqa: F401
