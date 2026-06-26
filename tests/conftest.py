@@ -288,31 +288,6 @@ def valid_training_metrics_csv(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def valid_hybrid_eval_metrics(tmp_path: Path) -> Path:
-    """Write a tiny valid hybrid_eval_metrics.json and return its path."""
-    path = tmp_path / "hybrid_eval_metrics.json"
-    doc: dict[str, Any] = {
-        "schema_version": "2.0",
-        "created_utc": "2026-06-15T22:00:00Z",
-        "producer": {"run_id": "test_run", "model_checkpoint": "checkpoints/best.pt"},
-        "mixed": {
-            "n": 100,
-            "n_positives": 10,
-            "n_negatives": 90,
-            "metrics": {"auroc": 0.8},
-        },
-        "iafdb_only": {
-            "n": 90,
-            "mean_prob_fibrotic": 0.5,
-            "fpr_at_0_5": 0.3,
-            "p1_prob_fibrotic": 0.05,
-        },
-    }
-    path.write_text(json.dumps(doc), encoding="utf-8")
-    return path
-
-
-@pytest.fixture
 def valid_egm_class_model_metadata(tmp_path: Path) -> Path:
     """Write a tiny valid egm_class_model_metadata JSON sidecar and return its path."""
     path = tmp_path / "best.model_metadata.json"

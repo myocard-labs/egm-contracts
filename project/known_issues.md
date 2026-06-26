@@ -57,6 +57,28 @@ as part of the same change.
 
 ## Resolved / closed
 
+### `hybrid_eval_metrics` schema removed (v0.4.1)
+
+The `hybrid_eval_metrics` JSON format was deleted. It persisted aggregate
+classifier scores over a mixed synthetic + IAFDB set, including AUROC / FPR /
+confusion computed against IAFDB rows treated as healthy negatives. That
+framing is untenable: IAFDB has no fibrosis ground truth, so any
+label-dependent metric scores the model against an extraction assumption
+rather than truth (see `feedback-iafdb-unlabeled-no-ml-validation` /
+`project-iafdb-eval-catch22`).
+
+Going forward, rigorous labeled evaluation stays on synthetic data (captured
+in `training_run_record` / `training_metrics`); IAFDB is used only as a
+label-free **sanity check** on the model's probability/label distribution,
+computed at analysis time in `egm-studio` from the `ClassifierBank` (no
+persisted contract). A true Sánchez-style hybrid evaluation remains possible
+only if labeled real EGM data becomes available — `ClassifierBank` can hold
+the combined set, but IAFDB (our only open real source) is unlabeled. The
+removal dropped the schema, its validator, the generated model, and the
+`egm-data` reader/writer; `docs/schemas/hybrid_eval_metrics.md` is kept as a
+tombstone. The nominal producer (`egm-classifier`) never shipped a writer for
+it, so no producer code changed.
+
 ### `noise_bank` + `noise_bank_run_record` schemas added; `iafdb_bank` "none" filter mode (v0.2.0)
 
 Three related changes shipped together to support Phase 3 of the polyrepo
@@ -101,7 +123,8 @@ strikes.
 The standalone `predictions` schema (CSV+JSON pair) was retired in
 contracts v0.1.2. Per-trace prediction outputs now live inside the
 producing `ClassifierBank` in egm-data; the `hybrid_eval_metrics`
-schema (bumped to v2.0) records only the aggregate scores. Existing
+schema (then bumped to v2.0) recorded only the aggregate scores — it
+was itself removed in 0.4.1 (see above). Existing
 v1 prediction files from v1_baseline / v1.5 / v1_iafdb investigations
 are kept as-is in their checkpoint dirs as historical artifacts.
 

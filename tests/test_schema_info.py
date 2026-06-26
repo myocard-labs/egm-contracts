@@ -28,7 +28,6 @@ def test_supported_versions_returns_enum_for_each_schema() -> None:
         "noise_bank",
         "noise_bank_run_record",
         "training_run_record",
-        "hybrid_eval_metrics",
         "egm_class_model_metadata",
     ):
         versions = supported_versions(name)

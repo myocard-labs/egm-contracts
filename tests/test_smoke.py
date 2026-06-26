@@ -23,10 +23,9 @@ def test_version_is_pep440() -> None:
 
 
 def test_generated_models_are_present() -> None:
-    """All eight schema modules should be importable after codegen runs."""
+    """All seven schema modules should be importable after codegen runs."""
     expected = [
         "egm_class_model_metadata",
-        "hybrid_eval_metrics",
         "iafdb_bank",
         "noise_bank",
         "noise_bank_run_record",

@@ -13,7 +13,6 @@ import h5py
 
 from myocard_egm_contracts.validators import (
     validate_egm_class_model_metadata,
-    validate_hybrid_eval_metrics,
     validate_iafdb_bank,
     validate_noise_bank,
     validate_noise_bank_run_record,
@@ -72,11 +71,6 @@ def test_training_run_record_validates(valid_training_run_record: Path) -> None:
 
 def test_training_metrics_csv_validates(valid_training_metrics_csv: Path) -> None:
     result = validate_training_metrics(valid_training_metrics_csv)
-    assert result.ok, result.issues
-
-
-def test_hybrid_eval_metrics_validates(valid_hybrid_eval_metrics: Path) -> None:
-    result = validate_hybrid_eval_metrics(valid_hybrid_eval_metrics)
     assert result.ok, result.issues
 
 

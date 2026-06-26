@@ -27,7 +27,6 @@ from __future__ import annotations
 
 from ._result import ValidationResult
 from .egm_class_model_metadata import validate_egm_class_model_metadata
-from .hybrid_eval_metrics import validate_hybrid_eval_metrics
 from .iafdb_bank import validate_iafdb_bank
 from .noise_bank import validate_noise_bank
 from .noise_bank_run_record import validate_noise_bank_run_record
@@ -38,7 +37,6 @@ from .training_run_record import validate_training_run_record
 __all__ = [
     "ValidationResult",
     "validate_egm_class_model_metadata",
-    "validate_hybrid_eval_metrics",
     "validate_iafdb_bank",
     "validate_noise_bank",
     "validate_noise_bank_run_record",

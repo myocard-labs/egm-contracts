@@ -8,7 +8,7 @@ Part of the [myocard-labs](https://github.com/myocard-labs) cardiac signal proce
 
 ## Why
 
-This package owns the **schemas** for every data format used across the project — synthetic banks, IAFDB banks, training-run records, hybrid-eval reports, and the deployment-time model metadata sidecar. It is the slowly-changing interface boundary between producers (`iafdb-pipeline`, `synthetic-egm-pipeline`, `egm-classifier`) and consumers (`egm-data`, `egm-studio`).
+This package owns the **schemas** for every data format used across the project — synthetic banks, IAFDB banks, training-run records, and the deployment-time model metadata sidecar. It is the slowly-changing interface boundary between producers (`iafdb-pipeline`, `synthetic-egm-pipeline`, `egm-classifier`) and consumers (`egm-data`, `egm-studio`).
 
 **JSON-Schema-first.** The master truth for every format is a JSON Schema (Draft 2020-12) file. Pydantic models (Python) are codegen'd from those schemas; C++ structs (eventually, for the TensorRT-targeted deployment) will be codegen'd from the same source. The schema files are the only place you edit when a format changes.
 
@@ -97,12 +97,11 @@ The eight formats currently described:
 | `noise_bank_run_record` | JSON sidecar to noise_bank | `iafdb-pipeline` | reproducibility audits, paper methods |
 | `run_record` | JSON (`run.json`) | `egm-classifier` (training) | `egm-studio`, paper figures |
 | `metrics` | CSV (`metrics.csv`) | `egm-classifier` (training) | `egm-studio`, paper figures |
-| `hybrid_eval_metrics` | JSON (`hybrid_eval_metrics.json`) | `egm-classifier` (hybrid eval) | `egm-studio`, paper figures |
 | `model_metadata` | JSON sidecar | `egm-classifier` (export) | TensorRT C++ inference runtime |
 
-Per-trace prediction outputs are no longer their own format — they live inside the ClassifierBank produced by the eval step (in `egm-data`). The `hybrid_eval_metrics` schema records only the aggregate scores.
+Per-trace prediction outputs are no longer their own format — they live inside the ClassifierBank produced by the eval step (in `egm-data`). There is no aggregate-metrics format: the dedicated `hybrid_eval_metrics` schema was removed in 0.4.1 (see `docs/schemas/hybrid_eval_metrics.md`). Any evaluation scores are computed at analysis time in `egm-studio` from the ClassifierBank rather than persisted as a contract.
 
-"Hybrid" follows the cardiac-ML convention from Sánchez et al. 2021 — mixed in silico + in vivo data — and refers to the *evaluation set* that mixes synthetic positives with real IAFDB negatives. The synthetic bank itself is not called "hybrid" even when it has IAFDB-noise conditioning applied, since the labels are 100% synthetic. See `docs/schemas/` for the narrative explanation of each schema and `project/known_issues.md` for terminology and Phase 2 evolution notes.
+"Hybrid" follows the cardiac-ML convention from Sánchez et al. 2021 — mixed in silico + in vivo data. A hybrid *evaluation* (scoring against mixed synthetic positives and labeled real negatives) would need labeled real EGM data, which the project lacks — IAFDB has no fibrosis labels — so it cannot be run today. The synthetic bank itself is not called "hybrid" even when it has IAFDB-noise conditioning applied, since the labels are 100% synthetic. See `docs/schemas/` for the narrative explanation of each schema and `project/known_issues.md` for terminology and evolution notes.
 
 ---
 

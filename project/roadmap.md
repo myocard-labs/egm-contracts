@@ -23,8 +23,7 @@ contract and `project/schema_evolution.md` for the versioning policy):
   `noise_bank_run_record` (JSON sidecar capturing noise extraction
   provenance), `training_run_record` (`run.json` schema for training
   runs), `training_metrics` (CSV column contract for per-epoch
-  metrics + the in-memory metric bundle), `hybrid_eval_metrics`
-  (sim-to-real evaluation results), `egm_class_model_metadata`
+  metrics + the in-memory metric bundle), `egm_class_model_metadata`
   (deployment-time sidecar paired with each exported ONNX).
 - `datamodel-code-generator` Python Pydantic codegen wired into
   `codegen/gen_python.py`; CI runs the script and asserts a clean
