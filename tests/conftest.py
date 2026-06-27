@@ -15,6 +15,8 @@ import h5py
 import numpy as np
 import pytest
 
+from myocard_egm_contracts.schema_info import current_version
+
 # ---------------------------------------------------------------------------
 # HDF5 bank fixtures
 # ---------------------------------------------------------------------------
@@ -29,7 +31,7 @@ def valid_iafdb_bank(tmp_path: Path) -> Path:
     window_samples = 512
 
     with h5py.File(path, "w") as f:
-        f.attrs["schema_version"] = "1.1"
+        f.attrs["schema_version"] = current_version("iafdb_bank")
         f.attrs["created_utc"] = "2026-06-15T22:00:00Z"
         f.attrs["source"] = "iafdb v1.0.0"
         f.attrs["fs_hz"] = 1000.0
@@ -87,7 +89,7 @@ def valid_noise_bank(tmp_path: Path) -> Path:
     window_samples = 512
 
     with h5py.File(path, "w") as f:
-        f.attrs["schema_version"] = "1.0"
+        f.attrs["schema_version"] = current_version("noise_bank")
         f.attrs["created_utc"] = "2026-06-17T22:00:00Z"
         f.attrs["source"] = "iafdb v1.0.0"
         f.attrs["fs_hz"] = 1000.0
@@ -119,7 +121,7 @@ def valid_noise_bank_run_record(tmp_path: Path) -> Path:
     """
     path = tmp_path / "noise_v1_run_record.json"
     doc = {
-        "schema_version": "1.0",
+        "schema_version": current_version("noise_bank_run_record"),
         "created_utc": "2026-06-17T22:00:00Z",
         "source": "iafdb v1.0.0",
         "description": "tiny test fixture",
@@ -159,7 +161,7 @@ def valid_synthetic_bank(tmp_path: Path) -> Path:
     T = 200
 
     with h5py.File(path, "w") as f:
-        f.attrs["schema_version"] = "1.0"
+        f.attrs["schema_version"] = current_version("synthetic_bank")
         f.attrs["created_utc"] = "2026-06-15T22:00:00Z"
         f.attrs["description"] = "tiny test fixture"
         f.attrs["fs_hz"] = 1000.0
@@ -205,7 +207,7 @@ def valid_training_run_record(tmp_path: Path) -> Path:
     """Write a tiny valid run.json and return its path."""
     path = tmp_path / "run.json"
     doc: dict[str, Any] = {
-        "schema_version": "1.0",
+        "schema_version": current_version("training_run_record"),
         "created_utc": "2026-06-15T22:00:00Z",
         "run": {"run_id": "test_run", "git_sha": "abc1234"},
         "config": {"model": {}, "data": {}, "training": {}, "eval": {}},
@@ -292,7 +294,7 @@ def valid_egm_class_model_metadata(tmp_path: Path) -> Path:
     """Write a tiny valid egm_class_model_metadata JSON sidecar and return its path."""
     path = tmp_path / "best.model_metadata.json"
     doc: dict[str, Any] = {
-        "schema_version": "1.1",
+        "schema_version": current_version("egm_class_model_metadata"),
         "created_utc": "2026-06-15T22:00:00Z",
         "model_artifact": {"filename": "best.onnx", "framework": "onnx"},
         "input": {"name": "signal", "shape": ["?", 1, 512], "dtype": "float32"},
