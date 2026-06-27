@@ -49,6 +49,10 @@ contract and `project/schema_evolution.md` for the versioning policy):
 - **v0.4.1** — removed the `hybrid_eval_metrics` schema (untenable
   label-free eval; see `project/known_issues.md`).
 - **v0.5.0** — cross-artifact linkage (see the v0.5.0 section below).
+- **v0.5.1** — export the `common` module (`ArtifactId` / `FigureId` /
+  `PaperId`) from the public API so consumers (egm-data, producers) can
+  validate ids via the shared types. Export-only; no schema change, no
+  codegen change.
 
 ### Deferred — align HeldOutTest.metrics to EpochRecord.val_metrics — component-internal
 
