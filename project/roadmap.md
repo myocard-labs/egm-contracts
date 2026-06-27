@@ -11,7 +11,7 @@ Items scheduled into cross-cutting Phase work in the meta repo's
 annotation; the rest are component-internal — driven by schema audits
 or downstream-consumer needs.
 
-## v0.4.0 — current release (shipped)
+## v0.4.0 (shipped)
 
 Scope (recap; see `docs/schemas/` for the per-schema human-readable
 contract and `project/schema_evolution.md` for the versioning policy):
@@ -44,9 +44,13 @@ contract and `project/schema_evolution.md` for the versioning policy):
   earlier per-channel mean/std arrays were dropped as ill-suited to
   the per-trace gain-invariance the v1 classifier wants.
 
-## v0.4.x — planned additive bumps (minor / fix)
+## Shipped after v0.4.0
 
-### v0.4.1 — align HeldOutTest.metrics to EpochRecord.val_metrics — component-internal
+- **v0.4.1** — removed the `hybrid_eval_metrics` schema (untenable
+  label-free eval; see `project/known_issues.md`).
+- **v0.5.0** — cross-artifact linkage (see the v0.5.0 section below).
+
+### Deferred — align HeldOutTest.metrics to EpochRecord.val_metrics — component-internal
 
 The `training_run_record` schema's `HeldOutTest.metrics` field shape
 drifted slightly from `EpochRecord.val_metrics` during the v0.3.x
@@ -54,11 +58,33 @@ training-side rewrite — both should carry the same scalar bundle
 shape (auroc, accuracy, f1, precision, recall, ece, confusion,
 reliability) so consumers (egm-viewer, future egm-studio) can render
 them with one code path. Additive alignment; no consumer breakage
-expected.
+expected. (Was tentatively slated for v0.4.1, but that number shipped
+the hybrid removal — re-target to a future minor.)
 
 > → Component-internal (task #275). Schedule when convenient; doesn't gate a phase.
 
-## v0.5.0+ — concrete next steps
+## v0.5.0 — current release (shipped)
+
+Cross-artifact linkage — organizing a phase's artifacts. See
+`intracardiac-platform/project/cross_artifact_linkage_design.md`.
+
+- Three new JSON schemas: `phase_manifest` (per-phase shallow index of
+  every artifact, with `egm_banks` + `noise_banks` bank sections),
+  `observation` (a recorded discovery, optionally pinning traces),
+  `figure_spec` (declarative spec for one publication figure).
+- New `common` shared-`$defs` schema holding the stable cross-artifact id
+  patterns (`ArtifactId` / `FigureId` / `PaperId`), referenced cross-file
+  so each pattern is defined exactly once. Validators gained a
+  `referencing.Registry` to resolve those refs.
+- Optional stable-id fields added to existing schemas (all optional
+  in-schema; egm-data enforces on new writes):
+  `synthetic_bank` 1.1 (+`bank_id`), `iafdb_bank` 1.2 (+`bank_id`),
+  `noise_bank_run_record` 1.1 (+`bank_id`), `training_run_record` 1.1
+  (+`run_id` / `trained_on_bank_id` / `produced_model_id`),
+  `egm_class_model_metadata` 1.2 (+`model_id`).
+- No new runtime deps — the linkage formats are JSON, not YAML.
+
+## v0.6.0+ — concrete next steps
 
 These are sized for "could land in one focused PR each" but several
 are gated on downstream consumers' needs landing first. Order is
@@ -74,13 +100,16 @@ richer activation sources scheduled into Phase 1.5 / Phase 2 / Phase 4
 
 The plan: replace `stim_edge` with a polymorphic `stimulation`
 object (type discriminator + per-type params). Coordinated bump:
-egm-contracts v0.5.0 + egm-data (cascade) + synthetic-egm-pipeline
-in one release. Schema migration noted in
-`project/schema_evolution.md`.
+egm-contracts v0.6.0 + egm-data (cascade) + synthetic-egm-pipeline
+in one release (v0.5.0 was taken by the cross-artifact-linkage work).
+Schema migration noted in `project/schema_evolution.md`.
 
 > → Tracked at `intracardiac-platform/project/project_plan.md` Phase 2 (first-publish milestone — bundling the schema bump here avoids fragmenting the polymorphic-stimulation work across multiple releases). The producer-side scope is in synthetic-egm-pipeline's roadmap under "Additional activation sources."
 
-### `iafdb_bank` 1.2 — audit-report sidecar pointer — Phase 1.5
+### `iafdb_bank` 1.3 — audit-report sidecar pointer — Phase 1.5
+
+> Note: `iafdb_bank` 1.2 was used for the optional `bank_id` field in
+> v0.5.0, so this audit-sidecar work is now 1.3.
 
 Add an optional `run_record_path` field to the `iafdb_bank` schema
 attrs so the healthy bank can carry a paired JSON sidecar with
@@ -102,7 +131,10 @@ extracted."
 
 > → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5. Pairs with iafdb-pipeline's opt-in noise-calibration roadmap item.
 
-### `noise_bank_run_record` 1.1 — `per_trace_provenance.lead` — Phase 1.5
+### `noise_bank_run_record` 1.2 — `per_trace_provenance.lead` — Phase 1.5
+
+> Note: `noise_bank_run_record` 1.1 was used for the optional `bank_id`
+> field in v0.5.0, so this work is now 1.2.
 
 Add a `lead` field to the per-trace provenance dict so the noise sidecar
 records which surface lead won the calibration's priority-order

@@ -5,7 +5,10 @@
 A versioned, full-fidelity record of a single training run. Written as
 `run.json` into each training-run's checkpoint directory.
 
-Schema version: `1.0`.
+Schema version: `1.1`. `1.1` added the optional stable-artifact pointer
+fields `run_id`, `trained_on_bank_id`, and `produced_model_id`
+(cross-artifact linkage, egm-contracts v0.5.0); all optional so older
+records remain valid.
 
 ## Why it exists
 
@@ -22,18 +25,29 @@ unknown formats cleanly rather than silently misparsing.
 
 ### Top-level
 
-- **`schema_version`** — `"1.0"`.
+- **`schema_version`** — `"1.1"`.
 - **`created_utc`** — ISO-8601 timestamp at write time. Set at the
   end of training, not the start.
+- **`run_id`** — *optional, since 1.1.* Stable cross-artifact id of THIS
+  run (e.g. `run_v1_5_courtemanche_2026-06-25`); pattern defined once in
+  `common.schema.json`. Distinct from the free-form `run.run_id` metadata
+  key below — producers SHOULD make them equal when both are set.
+- **`trained_on_bank_id`** — *optional, since 1.1.* Stable id of the
+  training bank this run consumed (relationship: run → bank).
+- **`produced_model_id`** — *optional, since 1.1.* Stable id of the model
+  this run produced (relationship: run → model). Pairs with the model
+  sidecar's own `model_id`.
 - **`run`** — run-level metadata (object). Well-known keys
-  (producer SHOULD write all of these): `run_id` (unique string),
-  `git_sha` (repo state at training start), `host`, `model_version`,
-  `training_started_utc`, `training_ended_utc`. Additional
-  producer-defined keys allowed.
+  (producer SHOULD write all of these): `git_sha` (repo state at training
+  start), `host`, `model_version`, `training_started_utc`,
+  `training_ended_utc`. Additional producer-defined keys allowed. (The
+  run's stable id lives in the top-level `run_id`, not here.)
 - **`config`** — fully-resolved training configuration as a nested
   object. Well-known top-level keys: `model`, `data`, `training`,
-  `eval`. Contents reflect the producer's config system; consumers
-  treat unknown keys as additional context.
+  `eval`. The training bank's stable id is the top-level
+  `trained_on_bank_id`, not a path inside `config.data`. Contents reflect
+  the producer's config system; consumers treat unknown keys as
+  additional context.
 - **`epochs`** — array of `EpochRecord`, one per training epoch.
 - **`best`** — summary of the selected best epoch by the configured
   selection metric.
@@ -76,7 +90,8 @@ typically summarized by `val_ece`.
 
 ## Versioning
 
-Currently `1.0`. Bump triggers:
+Currently `1.1` (`1.1` added the stable-artifact pointer fields). Bump
+triggers:
 
 - Adding a required field to `EpochRecord` or to the top-level.
 - Changing the meaning of an existing field.
@@ -96,17 +111,19 @@ Skeleton of a complete run.json:
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "created_utc": "2026-06-11T22:00:00Z",
+  "run_id": "run_v1_baseline_2026-06-11",
+  "trained_on_bank_id": "tbank_synthetic_hybrid_v1_2026-06-10",
+  "produced_model_id": "model_egm_classifier_v1_baseline_2026-06-11",
   "run": {
-    "run_id": "v1_baseline",
     "git_sha": "abc1234",
     "host": "danielk-desktop",
     "model_version": "mobilevit1d-v1"
   },
   "config": {
     "model": {"width_multiplier": 0.5, "num_classes": 1},
-    "data": {"bank_path": "banks/hybrid_v1.h5"},
+    "data": {"split_ratios": [0.8, 0.1, 0.1]},
     "training": {"epochs": 60, "batch_size": 32, "optimizer": "adamw"},
     "eval": {"select_metric": "auroc", "decision_threshold": 0.5}
   },

@@ -216,8 +216,23 @@ Schemas only appear here once they've had their first bump beyond
 `1.0`; an absence from this list means the schema is still at its
 introduction version.
 
+### common
+
+- **(introduced v0.5.0)** — new shared-`$defs` schema holding the stable
+  cross-artifact id patterns (ArtifactId / FigureId / PaperId), referenced
+  cross-file by every schema that carries an id. Single source of truth:
+  update a pattern here and all schemas inherit it. Not a document format
+  (no document validator; nothing is written to disk in this shape).
+
 ### egm_class_model_metadata
 
+- **1.2** — egm-contracts v0.5.0. Added the optional `model_id`
+  stable-artifact identifier (the model's own ID; what a run.json's
+  `produced_model_id` points at). Optional in-schema; egm-classifier
+  enforces it on new writes. The model→run link is intentionally NOT
+  stored in this deployment sidecar — the run record owns that pointer.
+  Part of the cross-artifact linkage wave (see
+  `intracardiac-platform/project/cross_artifact_linkage_design.md`).
 - **1.1** — egm-contracts v0.4.0. Dropped per-channel `mean` /
   `std` arrays from `preprocessing.normalization`; switched the
   `normalization.scheme` enum from `{zscore, minmax, none}` to
@@ -228,6 +243,36 @@ introduction version.
   this contract.
 - **1.0** — egm-contracts v0.3.0. Initial release of this schema
   (renamed from `model_metadata`).
+
+### iafdb_bank
+
+- **1.2** — egm-contracts v0.5.0. Added the optional `bank_id`
+  stable-artifact identifier (HDF5 root attr). Cross-artifact
+  linkage wave.
+- **1.1** — egm-contracts v0.2.x. Added `'none'` to `threshold_mode`
+  + made `threshold_value` nullable, for the unfiltered-export path
+  (every window, no healthy threshold). (Backfilled change-log
+  entry — the bump predated this log section.)
+
+### noise_bank_run_record
+
+- **1.1** — egm-contracts v0.5.0. Added the optional `bank_id`
+  stable-artifact identifier for the noise bank (the design puts the
+  noise bank's stable ID on this sidecar rather than the HDF5).
+  Cross-artifact linkage wave.
+
+### synthetic_bank
+
+- **1.1** — egm-contracts v0.5.0. Added the optional `bank_id`
+  stable-artifact identifier (HDF5 root attr). Cross-artifact
+  linkage wave.
+
+### training_run_record
+
+- **1.1** — egm-contracts v0.5.0. Added the optional stable-artifact
+  pointer fields `run_id` (this run's own ID), `trained_on_bank_id`
+  (pointer to the training bank), and `produced_model_id` (pointer to
+  the exported model). Cross-artifact linkage wave.
 
 ---
 
