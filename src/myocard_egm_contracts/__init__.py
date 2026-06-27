@@ -8,7 +8,10 @@ Public API surface (all re-exported here for convenience):
 
 - **Schema models** — Pydantic v2 ``BaseModel`` classes, one per format. Use
   for type-safe construction, ``.model_validate(data)`` for incoming JSON, and
-  ``.model_dump()`` for outgoing data.
+  ``.model_dump()`` for outgoing data. The ``common`` module holds the shared
+  stable-id types (``ArtifactId`` / ``FigureId`` / ``PaperId``) referenced
+  cross-file by the other schemas; consumers can validate an id via e.g.
+  ``myocard_egm_contracts.common.ArtifactId(value)``.
 - **Schema source files** — the raw ``.schema.json`` files are also shipped in
   the wheel under ``myocard_egm_contracts.schemas`` and can be loaded via
   ``importlib.resources`` for tools that want the JSON Schema directly.
@@ -41,6 +44,7 @@ from importlib import metadata
 # clone, run ``pip install -e ".[dev]" && python codegen/gen_python.py``.
 try:
     from myocard_egm_contracts._generated.python import (
+        common,
         egm_class_model_metadata,
         figure_spec,
         iafdb_bank,
@@ -53,6 +57,7 @@ try:
         training_run_record,
     )
 except ImportError:  # pragma: no cover — happens only before first codegen run
+    common = None  # type: ignore[assignment]
     egm_class_model_metadata = None  # type: ignore[assignment]
     figure_spec = None  # type: ignore[assignment]
     iafdb_bank = None  # type: ignore[assignment]
@@ -100,6 +105,7 @@ except metadata.PackageNotFoundError:  # pragma: no cover — editable install w
 __all__ = [
     "ValidationResult",
     "__version__",
+    "common",
     "csv_column_order",
     "csv_required_columns",
     "current_version",
