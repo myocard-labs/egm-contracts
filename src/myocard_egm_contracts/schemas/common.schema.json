@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/common.schema.json",
+  "title": "Common",
+  "description": "Shared $defs reused across egm-contracts schemas via cross-file $ref. This is NOT a document format on its own — it has no document validator and nothing is written to disk in this shape. It exists so the stable cross-artifact identifier patterns are defined exactly once and inherited everywhere (update the regex here and every schema picks it up).",
+  "$defs": {
+    "ArtifactId": {
+      "type": "string",
+      "pattern": "^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$",
+      "description": "Stable cross-artifact identifier: <role_prefix>_<descriptive_name>_<YYYY-MM-DD>[_vN]. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1."
+    },
+    "FigureId": {
+      "type": "string",
+      "pattern": "^fig_[A-Za-z0-9_\\-]+$",
+      "description": "Figure identifier. Slug-based (hyphens allowed, no date suffix), so it does NOT match the dated ArtifactId pattern. e.g. fig_feature_distributions_synth_vs_iafdb."
+    },
+    "PaperId": {
+      "type": "string",
+      "pattern": "^paper_[a-z0-9_]+$",
+      "description": "Paper identifier (e.g. paper_phase_1_5_realism). Slug-based, no date."
+    }
+  }
+}

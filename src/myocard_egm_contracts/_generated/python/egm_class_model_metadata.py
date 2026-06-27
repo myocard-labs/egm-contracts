@@ -14,7 +14,7 @@ class SchemaVersion(Enum):
     Versioned schema identifier. Consumers MUST refuse unknown major versions.
     """
 
-    field_1_1 = "1.1"
+    field_1_2 = "1.2"
 
 
 class Framework(Enum):
@@ -139,6 +139,20 @@ class Decision(BaseModel):
     """
 
 
+class FigureId(RootModel[str]):
+    root: str = Field(..., pattern="^fig_[A-Za-z0-9_\\-]+$")
+    """
+    Figure identifier. Slug-based (hyphens allowed, no date suffix), so it does NOT match the dated ArtifactId pattern. e.g. fig_feature_distributions_synth_vs_iafdb.
+    """
+
+
+class PaperId(RootModel[str]):
+    root: str = Field(..., pattern="^paper_[a-z0-9_]+$")
+    """
+    Paper identifier (e.g. paper_phase_1_5_realism). Slug-based, no date.
+    """
+
+
 class Dtype(Enum):
     """
     Floating-point element dtype. Used for both input and output tensors.
@@ -198,7 +212,7 @@ class Output(BaseModel):
 
 class EgmClassModelMetadata(BaseModel):
     """
-    Preprocessing + inference-time constants paired with a deployed EGM-classifier model artifact (typically the ONNX file). Captures everything the runtime needs that is NOT encoded in the ONNX graph itself: expected sample rate, expected trace length, per-trace normalization scheme, decision threshold, model artifact hash, training provenance. Cross-language: consumed by Python (training-eval parity) and C++ (TensorRT inference). The field shape here (binary_logit semantics, single bipolar input, [batch, 1, T] tensor) is specific to the 1D EGM-classifier family — the middle '1' is the channel axis required by PyTorch Conv1d, not a multi-channel slot. Future model topologies (2D electrode grids, sparse 3D electrode point clouds) get their own schemas.
+    Preprocessing + inference-time constants paired with a deployed EGM-classifier model artifact (typically the ONNX file). Captures everything the runtime needs that is NOT encoded in the ONNX graph itself: expected sample rate, expected trace length, per-trace normalization scheme, decision threshold, model artifact hash, training provenance. Cross-language: consumed by Python (training-eval parity) and C++ (TensorRT inference). The field shape here (binary_logit semantics, single bipolar input, [batch, 1, T] tensor) is specific to the 1D EGM-classifier family — the middle '1' is the channel axis required by PyTorch Conv1d, not a multi-channel slot. Future model topologies (2D electrode grids, sparse 3D electrode point clouds) get their own schemas. Schema version 1.2 (from 1.1) added the optional `model_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage). The model->run link is intentionally NOT stored here — this file carries only what a deployed model needs; the run.json's `produced_model_id` records that link from the run side.
     """
 
     model_config = ConfigDict(
@@ -211,6 +225,12 @@ class EgmClassModelMetadata(BaseModel):
     created_utc: AwareDatetime
     """
     ISO-8601 UTC timestamp at export time.
+    """
+    model_id: str | None = Field(
+        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+    )
+    """
+    Stable artifact ID of THIS model, e.g. 'model_egm_classifier_v1_5_2026-06-25'. The model's own cross-artifact identifier — this is what a run.json's `produced_model_id` points at. Optional for legacy metadata written before egm-contracts v0.5.0; egm-classifier stamps it at export time. Added 1.2.
     """
     model_artifact: ModelArtifact
     """

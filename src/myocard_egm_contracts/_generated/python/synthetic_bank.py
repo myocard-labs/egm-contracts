@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, RootModel
 
 
 class SchemaVersion(Enum):
@@ -14,7 +14,7 @@ class SchemaVersion(Enum):
     Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions.
     """
 
-    field_1_0 = "1.0"
+    field_1_1 = "1.1"
 
 
 class StimEdgeEnum(Enum):
@@ -82,9 +82,23 @@ class Traces(BaseModel):
     """
 
 
+class FigureId(RootModel[str]):
+    root: str = Field(..., pattern="^fig_[A-Za-z0-9_\\-]+$")
+    """
+    Figure identifier. Slug-based (hyphens allowed, no date suffix), so it does NOT match the dated ArtifactId pattern. e.g. fig_feature_distributions_synth_vs_iafdb.
+    """
+
+
+class PaperId(RootModel[str]):
+    root: str = Field(..., pattern="^paper_[a-z0-9_]+$")
+    """
+    Paper identifier (e.g. paper_phase_1_5_realism). Slug-based, no date.
+    """
+
+
 class SyntheticBank(BaseModel):
     """
-    Synthetic intracardiac EGM bank (may include real-noise conditioning at the signal level). Schema version 1.0. Maps to an HDF5 file with bank-level root attrs plus a `traces/` group containing per-trace columns.
+    Synthetic intracardiac EGM bank (may include real-noise conditioning at the signal level). Schema version 1.1. Maps to an HDF5 file with bank-level root attrs plus a `traces/` group containing per-trace columns. 1.1 (from 1.0) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage).
     """
 
     model_config = ConfigDict(
@@ -97,6 +111,12 @@ class SyntheticBank(BaseModel):
     created_utc: AwareDatetime
     """
     ISO-8601 UTC timestamp captured at write time.
+    """
+    bank_id: str | None = Field(
+        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+    )
+    """
+    Stable artifact ID for this bank, e.g. 'tbank_synthetic_courtemanche_v1_5_2026-06-25'. Optional for legacy banks written before egm-contracts v0.5.0; egm-data stamps it on every new bank (enforced at write time, not by this schema, per the cross-artifact-linkage 'optional-in-schema, required-on-write' decision). Added 1.1.
     """
     description: str | None = None
     """

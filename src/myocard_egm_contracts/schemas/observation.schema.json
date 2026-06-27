@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/observation.schema.json",
+  "title": "Observation",
+  "description": "A recorded discovery made during signal exploration or ML diagnostics, living at intracardiac-platform/project/phases/phase_X/observations/<id>.json. Schema version 1. The free-text `description` is REQUIRED — the discovery IS the observation; a pure trace list with no prose is data without context. `traces` (pinned traces of interest) and `view_state` (egm-studio reload state) are OPTIONAL. Bank references are DERIVED (by validate_manifest) from the union of view_state.banks_loaded and traces[].bank, never declared separately, so they can't go out of sync. The observation does not declare which phase it belongs to — that membership is recorded by the phase manifest that points at it. See cross_artifact_linkage_design.md section 4.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["1"],
+      "description": "Schema version. Consumers MUST refuse unknown major versions."
+    },
+    "id": {
+      "$ref": "common.schema.json#/$defs/ArtifactId",
+      "description": "Stable artifact ID, obs_ prefix (e.g. obs_courtemanche_high_entropy_tail_2026-06-25)."
+    },
+    "date": {
+      "type": "string",
+      "format": "date",
+      "description": "Date the observation was recorded (YYYY-MM-DD)."
+    },
+    "title": {
+      "type": "string",
+      "description": "One-line summary of the discovery."
+    },
+    "description": {
+      "type": "string",
+      "description": "REQUIRED free-text prose — the 'what I noticed'. The whole point of an observation; lets someone returning cold understand the finding and decide whether it still matters."
+    },
+    "references": {
+      "type": "object",
+      "description": "Structured references to OTHER artifact types (models, parent observations). Bank refs are intentionally absent here — they are derived from view_state.banks_loaded + traces[].bank.",
+      "properties": {
+        "models": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/ArtifactId" },
+          "description": "Models this observation is about, if any."
+        },
+        "observations": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/ArtifactId" },
+          "description": "Parent observations this one builds on, if any."
+        }
+      },
+      "additionalProperties": false
+    },
+    "traces": {
+      "type": "array",
+      "description": "OPTIONAL pinned traces of interest. Becomes the data source for downstream trace-gallery figures that reference this observation.",
+      "items": { "$ref": "#/$defs/TraceRef" }
+    },
+    "view_state": {
+      "type": "object",
+      "description": "OPTIONAL egm-studio reload state — what to load to recreate the view that produced this observation. egm-studio owns the exact shape; additional keys are allowed for forward compatibility.",
+      "properties": {
+        "banks_loaded": {
+          "type": "array",
+          "items": { "$ref": "common.schema.json#/$defs/ArtifactId" },
+          "description": "Bank IDs loaded in the view."
+        },
+        "filter": { "type": "string", "description": "Filter expression applied (e.g. 'sample_entropy > 1.5')." },
+        "sort": { "type": "string", "description": "Sort expression applied (e.g. 'sample_entropy desc')." },
+        "selected_trace_indices_within_filter": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 },
+          "description": "Indices selected within the filtered/sorted view."
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": ["schema_version", "id", "date", "title", "description"],
+  "additionalProperties": false,
+  "$defs": {
+    "TraceRef": {
+      "type": "object",
+      "title": "TraceRef",
+      "description": "Reference to one trace inside a bank. v0.1 trace addressing is (bank id, integer index); stable per-trace IDs are a deferred upgrade.",
+      "properties": {
+        "bank": { "$ref": "common.schema.json#/$defs/ArtifactId", "description": "Stable id of the bank the trace lives in." },
+        "index": { "type": "integer", "minimum": 0, "description": "Integer index of the trace within the bank (v0.1 trace ID)." }
+      },
+      "required": ["bank", "index"],
+      "additionalProperties": false
+    }
+  }
+}
