@@ -7,7 +7,9 @@ segments were extracted, what their calibration scheme was, and the
 per-trace audit data needed to reproduce or interrogate the bank.
 Written as a JSON file alongside the bank.
 
-Schema version: `1.0`.
+Schema version: `1.1`. `1.1` added the optional `bank_id` stable-artifact
+identifier for the noise bank (cross-artifact linkage, egm-contracts
+v0.5.0); the field is optional so older records remain valid.
 
 ## Why it exists
 
@@ -44,6 +46,10 @@ sidecar; auditing tools open both.
 Top-level fields:
 
 - `schema_version`, `created_utc`
+- `bank_id` — *optional, since 1.1.* Stable artifact id for the noise
+  bank this sidecar describes (e.g. `nbank_iafdb_2026-06-15`); pattern
+  defined once in `common.schema.json`. The design puts the noise bank's
+  stable id on this sidecar rather than on the HDF5 bank.
 - `source` — identical to the sibling bank's `source` field
 - `description` — free-form note about the run
 - `fs_hz` — mirrors the bank's `fs_hz` so the record stands alone as

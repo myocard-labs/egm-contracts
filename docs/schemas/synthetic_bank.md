@@ -12,7 +12,9 @@ metadata; a `traces/` group holds the per-trace columns. All columns
 inside `traces/` share a first dimension N (the trace count) and are
 aligned.
 
-Schema version: `1.0`.
+Schema version: `1.1`. `1.1` added the optional `bank_id` stable-artifact
+identifier (cross-artifact linkage, egm-contracts v0.5.0); `1.0` banks
+remain valid because the field is optional.
 
 ## Why it exists
 
@@ -33,8 +35,13 @@ binary / multi-class / regression targets without regenerating data.
 ### Bank-level (HDF5 root attrs)
 
 - **`schema_version`** — schema version constant, currently
-  `"1.0"`.
+  `"1.1"`.
 - **`created_utc`** — ISO-8601 timestamp at write time.
+- **`bank_id`** — *optional, since 1.1.* Stable cross-artifact
+  identifier for this bank (e.g.
+  `tbank_synthetic_courtemanche_v1_5_2026-06-25`). The pattern is defined
+  once in `common.schema.json` and referenced here. Absent on legacy
+  banks; egm-data stamps it on every new bank.
 - **`description`** — free-text human-readable label for the bank.
 - **`fs_hz`** — sampling rate in Hz.
 - **`trace_duration_ms`** — per-trace duration in milliseconds.
@@ -84,7 +91,7 @@ All columns are aligned, length N:
 
 ## Versioning
 
-Currently `1.0`. Known triggers for
+Currently `1.1` (`1.1` added the optional `bank_id`). Known triggers for
 future bumps:
 
 - The `stim_edge` enum being replaced by a richer `stimulation` object
@@ -107,8 +114,9 @@ A minimal valid bank payload:
 
 ```json
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "created_utc": "2026-06-15T20:30:00Z",
+  "bank_id": "tbank_synthetic_courtemanche_v1_5_2026-06-25",
   "description": "Phase 1 bank — 100 sims × 20 traces/sim",
   "fs_hz": 1000.0,
   "trace_duration_ms": 200.0,

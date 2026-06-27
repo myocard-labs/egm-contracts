@@ -8,7 +8,7 @@ Part of the [myocard-labs](https://github.com/myocard-labs) cardiac signal proce
 
 ## Why
 
-This package owns the **schemas** for every data format used across the project — synthetic banks, IAFDB banks, training-run records, and the deployment-time model metadata sidecar. It is the slowly-changing interface boundary between producers (`iafdb-pipeline`, `synthetic-egm-pipeline`, `egm-classifier`) and consumers (`egm-data`, `egm-studio`).
+This package owns the **schemas** for every data format used across the project — synthetic banks, IAFDB banks, training-run records, the deployment-time model metadata sidecar, and the cross-artifact-linkage formats (per-phase manifest, observations, figure specs) that organize a phase's artifacts. It is the slowly-changing interface boundary between producers (`iafdb-pipeline`, `synthetic-egm-pipeline`, `egm-classifier`, `egm-studio`) and consumers (`egm-data`, `egm-studio`).
 
 **JSON-Schema-first.** The master truth for every format is a JSON Schema (Draft 2020-12) file. Pydantic models (Python) are codegen'd from those schemas; C++ structs (eventually, for the TensorRT-targeted deployment) will be codegen'd from the same source. The schema files are the only place you edit when a format changes.
 
@@ -87,7 +87,7 @@ Header-only; no compiled library shipped.
 
 ## Schemas
 
-The eight formats currently described:
+The ten on-disk formats currently described (plus `common`, a shared-`$defs` file holding the stable cross-artifact id patterns — not itself a format):
 
 | Schema | On-disk format | Producer | Consumer(s) |
 |---|---|---|---|
@@ -98,6 +98,11 @@ The eight formats currently described:
 | `run_record` | JSON (`run.json`) | `egm-classifier` (training) | `egm-studio`, paper figures |
 | `metrics` | CSV (`metrics.csv`) | `egm-classifier` (training) | `egm-studio`, paper figures |
 | `model_metadata` | JSON sidecar | `egm-classifier` (export) | TensorRT C++ inference runtime |
+| `phase_manifest` | JSON (`manifest.json`) | `egm-studio` (curator) | `validate_manifest.py`, `egm-data` |
+| `observation` | JSON | `egm-studio` | `egm-data`, `validate_manifest.py` |
+| `figure_spec` | JSON | `egm-studio` | `egm-studio` figure-render CLI, `egm-data` |
+
+The last three — `phase_manifest`, `observation`, `figure_spec` — are the cross-artifact-linkage formats added in v0.5.0; their files live in `intracardiac-platform/project/phases/`, but egm-contracts owns the schema + the path-based validators. The shared `common.schema.json` defines the `ArtifactId` / `FigureId` / `PaperId` patterns once and is referenced cross-file. See `intracardiac-platform/project/cross_artifact_linkage_design.md`.
 
 Per-trace prediction outputs are no longer their own format — they live inside the ClassifierBank produced by the eval step (in `egm-data`). There is no aggregate-metrics format: the dedicated `hybrid_eval_metrics` schema was removed in 0.4.1 (see `docs/schemas/hybrid_eval_metrics.md`). Any evaluation scores are computed at analysis time in `egm-studio` from the ClassifierBank rather than persisted as a contract.
 
@@ -140,16 +145,46 @@ egm-contracts/
 
 ## Tests
 
+Run the same checks CI runs, from the repo root (after `pip install -e ".[dev]"`):
+
 ```bash
 pytest                  # full suite
 pytest --cov            # with coverage
 ruff check .            # lint
 ruff format --check .   # format
 mypy                    # type check
-python codegen/gen_python.py && git diff --exit-code src/myocard_egm_contracts/_generated/python/   # codegen drift check
 ```
 
-CI runs all of the above on Python 3.10 / 3.11 / 3.12 plus the codegen-drift job — see `.github/workflows/ci.yml`.
+### Codegen drift check
+
+The Pydantic models under `src/myocard_egm_contracts/_generated/python/` are
+generated from the schemas and committed to the repo. CI regenerates them and
+fails the build if the result differs from what you committed — i.e. you edited
+a schema but forgot to regenerate (or to commit) the model. To verify it will
+pass **before** you push:
+
+```bash
+# 1. Regenerate the models in place.
+python codegen/gen_python.py
+
+# 2. See what (if anything) changed. EMPTY output = no drift = CI will pass.
+git status --short src/myocard_egm_contracts/_generated/python/
+```
+
+If step 2 prints **nothing**, the codegen-drift job will pass once you push. If
+it **lists files** (` M` modified or `??` new), those are freshly regenerated
+models you need to `git add` and commit — then re-run step 2 to confirm it's
+clean.
+
+(CI runs the equivalent as a single gate:
+`python codegen/gen_python.py && git diff --exit-code src/myocard_egm_contracts/_generated/python/`
+— `git diff --exit-code` returns 0 and prints nothing when there's no drift,
+non-zero when there is. The `git status --short` version above is easier to read
+locally and also catches brand-new generated files, which a bare `git diff`
+does not.)
+
+CI runs everything above on Python 3.10 / 3.11 / 3.12 — see
+`.github/workflows/ci.yml`.
 
 ---
 

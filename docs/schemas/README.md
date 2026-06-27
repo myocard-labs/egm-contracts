@@ -29,6 +29,19 @@ documentation.
 | [training_run_record](training_run_record.md) | JSON | Full versioned record of one ML training run |
 | [training_metrics](training_metrics.md) | CSV | Flat per-epoch training metrics |
 | [egm_class_model_metadata](egm_class_model_metadata.md) | JSON | Preprocessing + inference constants paired with a deployed 1-D EGM-classifier model artifact |
+| [phase_manifest](phase_manifest.md) | JSON | Per-phase shallow index of every artifact in a project phase (cross-artifact linkage) |
+| [observation](observation.md) | JSON | A recorded discovery during signal exploration / ML diagnostics, optionally pinning traces |
+| [figure_spec](figure_spec.md) | JSON | Declarative spec for one publication figure; the spec is git-tracked, the image is build output |
+
+The last three (`phase_manifest` / `observation` / `figure_spec`) are the
+cross-artifact-linkage schemas added in v0.5.0. They are JSON, matching the
+other on-disk record formats in this package. Their files live in
+`intracardiac-platform/project/phases/`, but egm-contracts owns the schema
++ the path-based validators. The stable cross-artifact id patterns
+(ArtifactId / FigureId / PaperId) they share with the bank, run, and model
+schemas are defined once in `common.schema.json` and referenced cross-file
+(it is a shared-`$defs` file, not a document format). See
+`intracardiac-platform/project/cross_artifact_linkage_design.md`.
 
 ---
 

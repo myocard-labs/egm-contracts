@@ -53,6 +53,27 @@ multi-beat pacing) will hit this first. The synthetic-egm-pipeline refactor
 chat that adds those features should also do this schema bump in egm-contracts
 as part of the same change.
 
+### `observation` — trace references use a fragile integer index
+
+**Current state (v0.5.0).** The `observation` schema's `TraceRef` addresses
+a trace as `{ "bank": <ArtifactId>, "index": <int> }` — the integer position
+of the trace inside the bank. This is the v0.1 trace-ID scheme shared with
+the manifest / figure-linkage design.
+
+**Why this is a problem.** The index is only stable as long as the bank is
+never re-extracted or re-ordered. If a producer regenerates a bank, a saved
+observation's pinned traces can silently point at different signals.
+
+**Resolution plan.** Introduce stable per-trace IDs (synthetic:
+`<sim_id>_<electrode_pair_id>`; IAFDB:
+`<record>_<channel>_<segment_start_ms>`) and bump `observation` (the
+`TraceRef.index` field becomes `trace_id`). Deferred — the integer-index
+hybrid was the locked-in v0.1 decision; see "Open follow-ups" in
+`intracardiac-platform/project/cross_artifact_linkage_design.md`.
+
+**Trigger.** First time a re-extracted bank invalidates a saved trace-list
+observation in a painful way.
+
 ---
 
 ## Resolved / closed

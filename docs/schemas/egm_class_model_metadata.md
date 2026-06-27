@@ -13,7 +13,10 @@ Written as a JSON file next to the model artifact (e.g.,
 both Python (training-eval parity checks) and C++ (inference
 runtimes).
 
-Schema version: `1.0`.
+Schema version: `1.2`. `1.2` added the optional `model_id` stable-artifact
+identifier (the model's own id, which a run.json's `produced_model_id`
+points at). The model→run link is intentionally *not* stored here — this
+file carries only what a deployed model needs.
 
 ## Why it exists
 
@@ -42,8 +45,13 @@ JSON, validate, apply, dispatch."
 
 ### Top-level
 
-- **`schema_version`** — `"1.0"`.
+- **`schema_version`** — `"1.2"`.
 - **`created_utc`** — ISO-8601 timestamp at model-export time.
+- **`model_id`** — *optional, since 1.2.* Stable cross-artifact id of
+  THIS model (e.g. `model_egm_classifier_v1_5_2026-06-25`); pattern
+  defined once in `common.schema.json`. This is what a run.json's
+  `produced_model_id` points at — the model→run link is recorded from the
+  run side, not duplicated here.
 - **`model_artifact`** — pointer to the model file this sidecar
   pairs with.
 - **`input`** — expected input tensor spec.
@@ -125,7 +133,7 @@ Additional producer-defined keys allowed.
 
 ## Versioning
 
-Currently `1.1`. Bump triggers:
+Currently `1.2` (`1.2` added the optional `model_id`). Bump triggers:
 
 - Adding required preprocessing steps (e.g., a notch filter).
 - Multi-class extensions to `decision` (per-class thresholds).
@@ -153,8 +161,9 @@ runtime-specific) artifacts. Consumed by:
 
 ```json
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "created_utc": "2026-06-11T22:30:00Z",
+  "model_id": "model_egm_classifier_v1_baseline_2026-06-11",
   "model_artifact": {
     "filename": "best.onnx",
     "framework": "onnx",
