@@ -13,7 +13,7 @@ class SchemaVersion(Enum):
     Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions.
     """
 
-    field_1_0 = "1.0"
+    field_1_1 = "1.1"
 
 
 class Windowing(BaseModel):
@@ -121,9 +121,23 @@ class PerTraceProvenance(BaseModel):
     """
 
 
+class FigureId(RootModel[str]):
+    root: str = Field(..., pattern="^fig_[A-Za-z0-9_\\-]+$")
+    """
+    Figure identifier. Slug-based (hyphens allowed, no date suffix), so it does NOT match the dated ArtifactId pattern. e.g. fig_feature_distributions_synth_vs_iafdb.
+    """
+
+
+class PaperId(RootModel[str]):
+    root: str = Field(..., pattern="^paper_[a-z0-9_]+$")
+    """
+    Paper identifier (e.g. paper_phase_1_5_realism). Slug-based, no date.
+    """
+
+
 class NoiseBankRunRecord(BaseModel):
     """
-    Provenance sidecar for a NoiseBank HDF5 file: how the noise segments were extracted (calibration, threshold strategy, filter band, windowing) plus per-trace provenance arrays aligned to the bank's traces. Schema version 1.0. Written as a sibling JSON file next to the bank with a matching name stem (e.g. iafdb_noise_v1.h5 + iafdb_noise_v1_run_record.json), following the same convention as metrics.csv + run.json in egm-classifier. The mixer never opens this file; debuggers, reproducibility audits, and the white paper's methods section do.
+    Provenance sidecar for a NoiseBank HDF5 file: how the noise segments were extracted (calibration, threshold strategy, filter band, windowing) plus per-trace provenance arrays aligned to the bank's traces. Schema version 1.1. Written as a sibling JSON file next to the bank with a matching name stem (e.g. iafdb_noise_v1.h5 + iafdb_noise_v1_run_record.json), following the same convention as metrics.csv + run.json in egm-classifier. The mixer never opens this file; debuggers, reproducibility audits, and the white paper's methods section do. 1.1 (from 1.0) added the optional `bank_id` stable-artifact identifier for the noise bank (egm-contracts v0.5.0, cross-artifact linkage); the design puts the noise bank's stable ID on this sidecar rather than the HDF5.
     """
 
     model_config = ConfigDict(
@@ -136,6 +150,12 @@ class NoiseBankRunRecord(BaseModel):
     created_utc: AwareDatetime
     """
     ISO-8601 UTC timestamp captured at write time. Should match (or closely follow) the sibling bank's created_utc.
+    """
+    bank_id: str | None = Field(
+        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+    )
+    """
+    Stable artifact ID for the noise bank this sidecar describes, e.g. 'nbank_iafdb_2026-06-15'. Optional for legacy records written before egm-contracts v0.5.0; egm-data stamps it on every new noise bank (enforced at write time, not by this schema). Added 1.1.
     """
     source: str
     """

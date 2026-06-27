@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import jsonschema
+from referencing import Registry, Resource
 
 from ._result import ValidationResult
 
@@ -27,10 +28,30 @@ def _load_schema(name: str) -> dict[str, Any]:
     return result
 
 
+@cache
+def _registry() -> Registry:
+    """A referencing Registry holding every schema in the package, keyed by $id.
+
+    Needed so cross-file ``$ref``s resolve — e.g. a schema's ``bank_id``
+    field references ``common.schema.json#/$defs/ArtifactId``, where the
+    stable-ID patterns are defined exactly once. Cached for the process.
+    """
+    entries: list[tuple[str, Resource[Any]]] = []
+    for entry in resources.files("myocard_egm_contracts.schemas").iterdir():
+        if entry.name.endswith(".schema.json"):
+            schema = json.loads(entry.read_text(encoding="utf-8"))
+            entries.append((schema["$id"], Resource.from_contents(schema)))
+    return Registry().with_resources(entries)
+
+
 def _validator_for(name: str) -> jsonschema.Draft202012Validator:
-    """Build a Draft 2020-12 validator for the named schema."""
+    """Build a Draft 2020-12 validator for the named schema.
+
+    The validator carries the package-wide :func:`_registry` so cross-file
+    ``$ref``s into ``common.schema.json`` resolve.
+    """
     schema = _load_schema(name)
-    return jsonschema.Draft202012Validator(schema)
+    return jsonschema.Draft202012Validator(schema, registry=_registry())
 
 
 def _path_str(path: tuple[Any, ...] | list[Any]) -> str:

@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, RootModel
 
 
 class SchemaVersion(Enum):
@@ -14,7 +14,21 @@ class SchemaVersion(Enum):
     Versioned schema identifier in <package>.<format>/<major>.<minor> form. Consumers MUST refuse unknown major versions.
     """
 
-    field_1_0 = "1.0"
+    field_1_1 = "1.1"
+
+
+class FigureId(RootModel[str]):
+    root: str = Field(..., pattern="^fig_[A-Za-z0-9_\\-]+$")
+    """
+    Figure identifier. Slug-based (hyphens allowed, no date suffix), so it does NOT match the dated ArtifactId pattern. e.g. fig_feature_distributions_synth_vs_iafdb.
+    """
+
+
+class PaperId(RootModel[str]):
+    root: str = Field(..., pattern="^paper_[a-z0-9_]+$")
+    """
+    Paper identifier (e.g. paper_phase_1_5_realism). Slug-based, no date.
+    """
 
 
 class BestEpoch(BaseModel):
@@ -131,7 +145,7 @@ class EpochRecord(BaseModel):
 
 class TrainingRunRecord(BaseModel):
     """
-    Versioned full-fidelity record of one ML training run, written to run.json. Schema version 1.0. Captures run-level metadata, the resolved training configuration, per-epoch records (each with its reliability bins), the best epoch by the configured selection metric, and an optional held-out test block. All non-finite floats are emitted as null so the JSON stays strictly valid. Renamed from 'run_record' at egm-contracts v0.3.0 to leave naming room for future per-activity run records (e.g. inference_run_record, hybrid_eval_run_record); the convention matches noise_bank_run_record (extraction-side).
+    Versioned full-fidelity record of one ML training run, written to run.json. Schema version 1.1. Captures run-level metadata, the resolved training configuration, per-epoch records (each with its reliability bins), the best epoch by the configured selection metric, and an optional held-out test block. All non-finite floats are emitted as null so the JSON stays strictly valid. Renamed from 'run_record' at egm-contracts v0.3.0 to leave naming room for future per-activity run records (e.g. inference_run_record, hybrid_eval_run_record); the convention matches noise_bank_run_record (extraction-side). 1.1 (from 1.0) added the optional stable-artifact pointer fields `run_id` / `trained_on_bank_id` / `produced_model_id` (egm-contracts v0.5.0, cross-artifact linkage).
     """
 
     model_config = ConfigDict(
@@ -142,13 +156,31 @@ class TrainingRunRecord(BaseModel):
     Versioned schema identifier in <package>.<format>/<major>.<minor> form. Consumers MUST refuse unknown major versions.
     """
     created_utc: AwareDatetime
+    run_id: str | None = Field(
+        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+    )
+    """
+    Stable artifact ID of THIS training run, e.g. 'run_v1_5_courtemanche_2026-06-25'. The run's own cross-artifact identifier — distinct from the free-form 'run_id' well-known key inside the `run` object below (producers SHOULD make the two equal when both are set). Optional for legacy records written before egm-contracts v0.5.0; egm-classifier stamps it at train time. Added 1.1.
+    """
+    trained_on_bank_id: str | None = Field(
+        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+    )
+    """
+    Stable artifact ID of the training bank this run consumed, e.g. 'tbank_synthetic_courtemanche_v1_5_2026-06-25'. Relationship pointer (run -> bank; future graph edge TRAINED_ON). Optional; stamped at train time. Added 1.1.
+    """
+    produced_model_id: str | None = Field(
+        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+    )
+    """
+    Stable artifact ID of the model this run produced, e.g. 'model_egm_classifier_v1_5_2026-06-25'. Relationship pointer (run -> model; future graph edge PRODUCED). Optional; stamped at export time. Added 1.1.
+    """
     run: dict[str, Any]
     """
-    Run-level metadata. Well-known keys (producer SHOULD write all of these): 'run_id' (string, unique identifier), 'git_sha' (string, repo state at training time), 'host' (string, hostname where training ran), 'model_version' (string, model architecture version tag), 'training_started_utc' / 'training_ended_utc' (ISO date-times). Additional keys allowed for forward compatibility.
+    Run-level metadata. Well-known keys (producer SHOULD write all of these): 'git_sha' (string, repo state at training time), 'host' (string, hostname where training ran), 'model_version' (string, model architecture version tag), 'training_started_utc' / 'training_ended_utc' (ISO date-times). Additional keys allowed for forward compatibility. The run's stable cross-artifact id lives in the top-level `run_id` field, not here.
     """
     config: dict[str, Any]
     """
-    The fully-resolved training configuration as a flat-ish nested dict. Well-known top-level keys: 'model' (architecture + hyperparameters), 'data' (bank paths, augmentation, split ratios), 'training' (optimizer, scheduler, epochs, batch size, loss), 'eval' (selection metric, decision threshold). The contents reflect whatever the producer's config system serializes; consumers should treat unknown keys as additional context rather than fail on them.
+    The fully-resolved training configuration as a flat-ish nested dict. Well-known top-level keys: 'model' (architecture + hyperparameters), 'data' (augmentation, split ratios), 'training' (optimizer, scheduler, epochs, batch size, loss), 'eval' (selection metric, decision threshold). The training bank's stable id lives in the top-level `trained_on_bank_id` field, not in config.data. The contents reflect whatever the producer's config system serializes; consumers should treat unknown keys as additional context rather than fail on them.
     """
     epochs: list[EpochRecord]
     """

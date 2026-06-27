@@ -42,18 +42,24 @@ from importlib import metadata
 try:
     from myocard_egm_contracts._generated.python import (
         egm_class_model_metadata,
+        figure_spec,
         iafdb_bank,
         noise_bank,
         noise_bank_run_record,
+        observation,
+        phase_manifest,
         synthetic_bank,
         training_metrics,
         training_run_record,
     )
 except ImportError:  # pragma: no cover — happens only before first codegen run
     egm_class_model_metadata = None  # type: ignore[assignment]
+    figure_spec = None  # type: ignore[assignment]
     iafdb_bank = None  # type: ignore[assignment]
     noise_bank = None  # type: ignore[assignment]
     noise_bank_run_record = None  # type: ignore[assignment]
+    observation = None  # type: ignore[assignment]
+    phase_manifest = None  # type: ignore[assignment]
     synthetic_bank = None  # type: ignore[assignment]
     training_metrics = None  # type: ignore[assignment]
     training_run_record = None  # type: ignore[assignment]
@@ -74,9 +80,12 @@ from myocard_egm_contracts.schema_info import (
 from myocard_egm_contracts.validators import (
     ValidationResult,
     validate_egm_class_model_metadata,
+    validate_figure_spec,
     validate_iafdb_bank,
     validate_noise_bank,
     validate_noise_bank_run_record,
+    validate_observation,
+    validate_phase_manifest,
     validate_synthetic_bank,
     validate_training_metrics,
     validate_training_run_record,
@@ -96,18 +105,24 @@ __all__ = [
     "current_version",
     "egm_class_model_metadata",
     "field_type_map",
+    "figure_spec",
     "get_schema",
     "iafdb_bank",
     "noise_bank",
     "noise_bank_run_record",
+    "observation",
+    "phase_manifest",
     "supported_versions",
     "synthetic_bank",
     "training_metrics",
     "training_run_record",
     "validate_egm_class_model_metadata",
+    "validate_figure_spec",
     "validate_iafdb_bank",
     "validate_noise_bank",
     "validate_noise_bank_run_record",
+    "validate_observation",
+    "validate_phase_manifest",
     "validate_synthetic_bank",
     "validate_training_metrics",
     "validate_training_run_record",

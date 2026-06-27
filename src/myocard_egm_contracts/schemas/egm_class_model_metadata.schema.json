@@ -2,18 +2,22 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/myocard-labs/egm-contracts/schemas/egm_class_model_metadata.schema.json",
   "title": "EgmClassModelMetadata",
-  "description": "Preprocessing + inference-time constants paired with a deployed EGM-classifier model artifact (typically the ONNX file). Captures everything the runtime needs that is NOT encoded in the ONNX graph itself: expected sample rate, expected trace length, per-trace normalization scheme, decision threshold, model artifact hash, training provenance. Cross-language: consumed by Python (training-eval parity) and C++ (TensorRT inference). The field shape here (binary_logit semantics, single bipolar input, [batch, 1, T] tensor) is specific to the 1D EGM-classifier family — the middle '1' is the channel axis required by PyTorch Conv1d, not a multi-channel slot. Future model topologies (2D electrode grids, sparse 3D electrode point clouds) get their own schemas.",
+  "description": "Preprocessing + inference-time constants paired with a deployed EGM-classifier model artifact (typically the ONNX file). Captures everything the runtime needs that is NOT encoded in the ONNX graph itself: expected sample rate, expected trace length, per-trace normalization scheme, decision threshold, model artifact hash, training provenance. Cross-language: consumed by Python (training-eval parity) and C++ (TensorRT inference). The field shape here (binary_logit semantics, single bipolar input, [batch, 1, T] tensor) is specific to the 1D EGM-classifier family — the middle '1' is the channel axis required by PyTorch Conv1d, not a multi-channel slot. Future model topologies (2D electrode grids, sparse 3D electrode point clouds) get their own schemas. Schema version 1.2 (from 1.1) added the optional `model_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage). The model->run link is intentionally NOT stored here — this file carries only what a deployed model needs; the run.json's `produced_model_id` records that link from the run side.",
   "type": "object",
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["1.1"],
+      "enum": ["1.2"],
       "description": "Versioned schema identifier. Consumers MUST refuse unknown major versions."
     },
     "created_utc": {
       "type": "string",
       "format": "date-time",
       "description": "ISO-8601 UTC timestamp at export time."
+    },
+    "model_id": {
+      "$ref": "common.schema.json#/$defs/ArtifactId",
+      "description": "Stable artifact ID of THIS model, e.g. 'model_egm_classifier_v1_5_2026-06-25'. The model's own cross-artifact identifier — this is what a run.json's `produced_model_id` points at. Optional for legacy metadata written before egm-contracts v0.5.0; egm-classifier stamps it at export time. Added 1.2."
     },
     "model_artifact": {
       "type": "object",

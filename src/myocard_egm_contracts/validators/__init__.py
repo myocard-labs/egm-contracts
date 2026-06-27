@@ -27,9 +27,12 @@ from __future__ import annotations
 
 from ._result import ValidationResult
 from .egm_class_model_metadata import validate_egm_class_model_metadata
+from .figure_spec import validate_figure_spec
 from .iafdb_bank import validate_iafdb_bank
 from .noise_bank import validate_noise_bank
 from .noise_bank_run_record import validate_noise_bank_run_record
+from .observation import validate_observation
+from .phase_manifest import validate_phase_manifest
 from .synthetic_bank import validate_synthetic_bank
 from .training_metrics import validate_training_metrics
 from .training_run_record import validate_training_run_record
@@ -37,9 +40,12 @@ from .training_run_record import validate_training_run_record
 __all__ = [
     "ValidationResult",
     "validate_egm_class_model_metadata",
+    "validate_figure_spec",
     "validate_iafdb_bank",
     "validate_noise_bank",
     "validate_noise_bank_run_record",
+    "validate_observation",
+    "validate_phase_manifest",
     "validate_synthetic_bank",
     "validate_training_metrics",
     "validate_training_run_record",
