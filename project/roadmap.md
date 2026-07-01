@@ -53,6 +53,12 @@ contract and `project/schema_evolution.md` for the versioning policy):
   `PaperId`) from the public API so consumers (egm-data, producers) can
   validate ids via the shared types. Export-only; no schema change, no
   codegen change.
+- **v0.5.2** — artifact-role vocabulary: a generated `Role` enum + id-prefix →
+  role map (`ROLE_PREFIXES`), single-sourced in `codegen/roles.json` and emitted
+  to `_generated/python/roles.py` by `gen_python.py` (C++ later, same source),
+  plus a hand-written `role_of()` classifier over them. Consumers derive an
+  artifact's role from its id one way instead of re-hardcoding prefixes. New
+  codegen input; no schema change.
 
 ### Deferred — align HeldOutTest.metrics to EpochRecord.val_metrics — component-internal
 
@@ -93,6 +99,22 @@ Cross-artifact linkage — organizing a phase's artifacts. See
 These are sized for "could land in one focused PR each" but several
 are gated on downstream consumers' needs landing first. Order is
 suggestive; pick by which Phase is closest.
+
+### `ArtifactId` / `FigureId` — drop the mandatory date suffix — Refactor Step 8 (cleanup)
+
+> → Surfaced 2026-06-30 from synthetic-egm-pipeline bank-id testing. Cross-tracked in `intracardiac-platform/project/refactor_checklist.md` Step 8.
+
+The id pattern currently *requires* a trailing `_YYYY-MM-DD` segment, so a
+hand-set `bank_id` config override without a date (e.g. `synthegm_v1_baseline`)
+fails validation. The date should be *optional*, not mandatory: auto-derived
+ids can keep stamping one, but a user-supplied id shouldn't be forced to carry
+it. Scope is small + contained here — loosen the regex (date segment optional),
+update the pattern docstring, and add a date-less id to the validator tests.
+
+It's a pattern change in egm-contracts only; consumers that validate or derive
+ids (egm-data, the producers' `ids.py`, egm-studio's `FigureSpec`) inherit the
+looser rule on re-pin — no consumer code change, just a coordinated version
+bump. Workaround until then: append a date to any manual id.
 
 ### Polymorphic stimulation schema (replace `stim_edge`) — Phase 2
 

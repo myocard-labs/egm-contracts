@@ -18,6 +18,10 @@ Public API surface (all re-exported here for convenience):
 - **Validators** — file-level conformance checkers (``validate_*``). These open
   the actual HDF5 / CSV / JSON file, map it onto the schema-shaped envelope,
   and run ``jsonschema`` validation.
+- **Role vocabulary** — the generated ``Role`` enum + the id-prefix-to-role map
+  ``ROLE_PREFIXES`` (single-sourced in ``codegen/roles.json``), plus the
+  hand-written ``role_of(id)`` classifier over them. Lets a consumer map a
+  stable artifact id to its pipeline role one way.
 
 Example::
 
@@ -74,6 +78,7 @@ except ImportError:  # pragma: no cover — happens only before first codegen ru
 # Re-export the schema introspection API. Consumers (e.g. myocard-egm-data
 # writers and readers) should pull schema versions, CSV column orders, and
 # type maps through these helpers rather than redeclaring them.
+from myocard_egm_contracts.roles import ROLE_PREFIXES, Role, role_of
 from myocard_egm_contracts.schema_info import (
     csv_column_order,
     csv_required_columns,
@@ -103,6 +108,8 @@ except metadata.PackageNotFoundError:  # pragma: no cover — editable install w
 
 
 __all__ = [
+    "ROLE_PREFIXES",
+    "Role",
     "ValidationResult",
     "__version__",
     "common",
@@ -118,6 +125,7 @@ __all__ = [
     "noise_bank_run_record",
     "observation",
     "phase_manifest",
+    "role_of",
     "supported_versions",
     "synthetic_bank",
     "training_metrics",
