@@ -16,3 +16,4 @@ from . import phase_manifest  # noqa: F401
 from . import synthetic_bank  # noqa: F401
 from . import training_metrics  # noqa: F401
 from . import training_run_record  # noqa: F401
+from . import roles  # noqa: F401

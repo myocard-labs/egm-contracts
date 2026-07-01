@@ -10,6 +10,11 @@ Plan (recorded in the ``feedback-schemas-json-schema-first`` memory):
 - Output: one .hpp per .schema.json into
   ``src/myocard_egm_contracts/_generated/cpp/``, plus a top-level
   ``myocard_egm_contracts.hpp`` umbrella header.
+- Role vocabulary: ``codegen/roles.json`` (the single source the Python side
+  emits to ``_generated/python/roles.py``) must also be emitted here -- a C++
+  ``Role`` enum + an id-prefix -> Role lookup -- so the vocabulary stays
+  single-sourced across languages. The ``role_of()`` logic over it is
+  hand-written per language, not generated.
 - Consumption: C++ projects pull egm-contracts via CMake ``FetchContent_Declare``
   pinned to a release tag, then ``#include
   <myocard_egm_contracts/synthetic_bank.hpp>``.

@@ -53,6 +53,12 @@ contract and `project/schema_evolution.md` for the versioning policy):
   `PaperId`) from the public API so consumers (egm-data, producers) can
   validate ids via the shared types. Export-only; no schema change, no
   codegen change.
+- **v0.5.2** — artifact-role vocabulary: a generated `Role` enum + id-prefix →
+  role map (`ROLE_PREFIXES`), single-sourced in `codegen/roles.json` and emitted
+  to `_generated/python/roles.py` by `gen_python.py` (C++ later, same source),
+  plus a hand-written `role_of()` classifier over them. Consumers derive an
+  artifact's role from its id one way instead of re-hardcoding prefixes. New
+  codegen input; no schema change.
 
 ### Deferred — align HeldOutTest.metrics to EpochRecord.val_metrics — component-internal
 

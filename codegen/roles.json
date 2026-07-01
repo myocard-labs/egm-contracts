@@ -1,0 +1,15 @@
+{
+  "$comment": "Canonical artifact-role vocabulary — the single source for the Role enum + the id-prefix -> role map. Codegen'd to Python by codegen/gen_python.py (-> _generated/python/roles.py) and, eventually, to C++ by codegen/gen_cpp.py. Edit HERE, never the generated roles.py. The role_of() logic over this vocabulary is hand-written per language (myocard_egm_contracts/roles.py in Python). Order is pipeline order and is preserved into the generated enum + map.",
+  "roles": [
+    {"name": "training_bank", "prefix": "tbank_"},
+    {"name": "pretraining_bank", "prefix": "ptbank_"},
+    {"name": "labeled_prediction_bank", "prefix": "lpred_"},
+    {"name": "unlabeled_prediction_bank", "prefix": "upred_"},
+    {"name": "noise_bank", "prefix": "nbank_"},
+    {"name": "training_run", "prefix": "run_"},
+    {"name": "model", "prefix": "model_"},
+    {"name": "observation", "prefix": "obs_"},
+    {"name": "figure", "prefix": "fig_"},
+    {"name": "paper", "prefix": "paper_"}
+  ]
+}
