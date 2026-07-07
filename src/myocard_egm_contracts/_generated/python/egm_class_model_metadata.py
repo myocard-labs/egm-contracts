@@ -227,7 +227,7 @@ class EgmClassModelMetadata(BaseModel):
     ISO-8601 UTC timestamp at export time.
     """
     model_id: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
     )
     """
     Stable artifact ID of THIS model, e.g. 'model_egm_classifier_v1_5_2026-06-25'. The model's own cross-artifact identifier — this is what a run.json's `produced_model_id` points at. Optional for legacy metadata written before egm-contracts v0.5.0; egm-classifier stamps it at export time. Added 1.2.

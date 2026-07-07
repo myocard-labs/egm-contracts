@@ -157,19 +157,19 @@ class TrainingRunRecord(BaseModel):
     """
     created_utc: AwareDatetime
     run_id: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
     )
     """
     Stable artifact ID of THIS training run, e.g. 'run_v1_5_courtemanche_2026-06-25'. The run's own cross-artifact identifier — distinct from the free-form 'run_id' well-known key inside the `run` object below (producers SHOULD make the two equal when both are set). Optional for legacy records written before egm-contracts v0.5.0; egm-classifier stamps it at train time. Added 1.1.
     """
     trained_on_bank_id: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
     )
     """
     Stable artifact ID of the training bank this run consumed, e.g. 'tbank_synthetic_courtemanche_v1_5_2026-06-25'. Relationship pointer (run -> bank; future graph edge TRAINED_ON). Optional; stamped at train time. Added 1.1.
     """
     produced_model_id: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
     )
     """
     Stable artifact ID of the model this run produced, e.g. 'model_egm_classifier_v1_5_2026-06-25'. Relationship pointer (run -> model; future graph edge PRODUCED). Optional; stamped at export time. Added 1.1.

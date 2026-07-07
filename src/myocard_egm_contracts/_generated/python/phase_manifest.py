@@ -42,9 +42,11 @@ class UsageTag(Enum):
 
 
 class ArtifactId(RootModel[str]):
-    root: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$")
+    root: str = Field(
+        ..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+    )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>_<YYYY-MM-DD>[_vN]. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
 
 
@@ -63,9 +65,9 @@ class NoiseBankEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$")
+    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>_<YYYY-MM-DD>[_vN]. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
     produced_by_package: str
@@ -85,21 +87,21 @@ class TrainingRunEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$")
+    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>_<YYYY-MM-DD>[_vN]. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
     produced_by_package: str
     produced_by_version: str
     trained_on_bank: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
     )
     """
     Relationship: run -> training bank (future edge TRAINED_ON).
     """
     produced_model: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
     )
     """
     Relationship: run -> model (future edge PRODUCED).
@@ -115,15 +117,15 @@ class ModelEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$")
+    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>_<YYYY-MM-DD>[_vN]. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
     produced_by_package: str
     produced_by_version: str
     trained_from_run: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
     )
     """
     Relationship: model -> run (future edge TRAINED_FROM, inverse of PRODUCED).
@@ -143,9 +145,9 @@ class ObservationEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$")
+    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>_<YYYY-MM-DD>[_vN]. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
     produced_by_package: str
@@ -224,9 +226,9 @@ class EgmBankEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$")
+    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>_<YYYY-MM-DD>[_vN]. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
     """
@@ -241,13 +243,13 @@ class EgmBankEntry(BaseModel):
     Producer version that wrote the artifact (e.g. v0.2.0).
     """
     model: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
     )
     """
     Prediction banks only: the model that produced the predictions (future edge EVALUATED_BY).
     """
     source_bank: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
     )
     """
     Prediction banks only: the EGM bank the predictions were computed on (future edge REFERENCES_SOURCE).

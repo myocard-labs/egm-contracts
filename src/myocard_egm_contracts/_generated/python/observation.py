@@ -22,9 +22,11 @@ class SelectedTraceIndicesWithinFilterItem(RootModel[int]):
 
 
 class ArtifactId(RootModel[str]):
-    root: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$")
+    root: str = Field(
+        ..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+    )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>_<YYYY-MM-DD>[_vN]. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
 
 
@@ -50,7 +52,9 @@ class TraceRef(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    bank: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$")
+    bank: str = Field(
+        ..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+    )
     """
     Stable id of the bank the trace lives in.
     """
@@ -118,7 +122,7 @@ class Observation(BaseModel):
     """
     Schema version. Consumers MUST refuse unknown major versions.
     """
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$")
+    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
     """
     Stable artifact ID, obs_ prefix (e.g. obs_courtemanche_high_entropy_tail_2026-06-25).
     """
