@@ -340,3 +340,14 @@ def test_synthetic_bank_with_malformed_bank_id_fails(valid_synthetic_bank: Path)
     result = validate_synthetic_bank(valid_synthetic_bank)
     assert not result
     assert any("bank_id" in i or "does not match" in i for i in result.issues), result.issues
+
+
+def test_synthetic_bank_with_dateless_bank_id_validates(valid_synthetic_bank: Path) -> None:
+    """S8-3: the ArtifactId ``_YYYY-MM-DD`` suffix is now optional — a hand-set
+    bank_id without a date (with or without a ``_vN`` suffix) must validate.
+    Auto-derived ids still stamp a date; user-supplied ids aren't forced to."""
+    for dateless in ("tbank_synthetic_courtemanche_handrolled", "tbank_synth_v3"):
+        with h5py.File(valid_synthetic_bank, "r+") as f:
+            f.attrs["bank_id"] = dateless
+        result = validate_synthetic_bank(valid_synthetic_bank)
+        assert result.ok, (dateless, result.issues)

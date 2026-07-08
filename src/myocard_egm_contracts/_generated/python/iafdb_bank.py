@@ -135,7 +135,7 @@ class IafdbBank(BaseModel):
     ISO-8601 UTC timestamp captured at write time.
     """
     bank_id: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
     )
     """
     Stable artifact ID for this bank, e.g. 'upred_iafdb_v1_5_2026-06-25' or 'nbank_iafdb_2026-06-15'. Optional for legacy banks written before egm-contracts v0.5.0; egm-data stamps it on every new bank (enforced at write time, not by this schema). Added 1.2.

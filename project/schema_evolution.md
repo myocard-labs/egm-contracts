@@ -218,6 +218,14 @@ introduction version.
 
 ### common
 
+- **(v0.5.3)** — `ArtifactId` date suffix made optional: pattern relaxed from
+  `^[a-z]+_[a-z0-9_]+_\d{4}-\d{2}-\d{2}(_v\d+)?$` to
+  `^[a-z]+_[a-z0-9_]+(_\d{4}-\d{2}-\d{2})?(_v\d+)?$` so a hand-set id (e.g. a
+  config `bank_id` override) needn't carry a date; auto-derived ids still stamp
+  one. Backward-compatible relaxation — every previously valid id still
+  validates. Common-only: no document schema's `schema_version` changed (they
+  inline the pattern via codegen, so all regenerate, but their contracts only
+  widen). egm-contracts package -> v0.5.3.
 - **(introduced v0.5.0)** — new shared-`$defs` schema holding the stable
   cross-artifact id patterns (ArtifactId / FigureId / PaperId), referenced
   cross-file by every schema that carries an id. Single source of truth:

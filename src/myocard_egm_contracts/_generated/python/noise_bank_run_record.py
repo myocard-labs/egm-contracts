@@ -152,7 +152,7 @@ class NoiseBankRunRecord(BaseModel):
     ISO-8601 UTC timestamp captured at write time. Should match (or closely follow) the sibling bank's created_utc.
     """
     bank_id: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+_\\d{4}-\\d{2}-\\d{2}(_v\\d+)?$"
+        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
     )
     """
     Stable artifact ID for the noise bank this sidecar describes, e.g. 'nbank_iafdb_2026-06-15'. Optional for legacy records written before egm-contracts v0.5.0; egm-data stamps it on every new noise bank (enforced at write time, not by this schema). Added 1.1.
