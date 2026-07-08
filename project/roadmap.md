@@ -1,266 +1,167 @@
 # egm-contracts — roadmap
 
-What's planned for future releases. Internal doc — public users see the
-README and `docs/schemas/`. The schema-evolution rules (which changes
-trigger minor vs major bumps, the X.Y format) are in
-`project/schema_evolution.md`; this doc is the *what's coming next*
-companion to that *how do we version it* reference.
+Future work only — shipped history lives in [`CHANGELOG.md`](../CHANGELOG.md). Internal
+doc; public users read the README + `docs/schemas/`.
 
-Items scheduled into cross-cutting Phase work in the meta repo's
-`project_plan.md` carry a `→ tracked at intracardiac-platform Phase X`
-annotation; the rest are component-internal — driven by schema audits
-or downstream-consumer needs.
+This is the *what's coming next* companion to [`project/schema_evolution.md`](schema_evolution.md)
+(the *how do we version it* reference — which changes force a minor vs major bump, the X.Y
+`schema_version` format). Because this repo is the head of the cascade, most items below carry a
+downstream tail (egm-data reader/writer → producers → consumers); the fixed
+[cascade order](#schema-bumps-to-coordinate-cascade-order) is spelled out at the bottom and is
+referenced by the egm-data + iafdb-pipeline roadmaps.
 
-## v0.4.0 (shipped)
+Work lands here as it's identified, sits in the **Backlog** until a phase-planning session
+promotes it, then moves to the CHANGELOG once shipped. Items scheduled into cross-cutting Phase
+work carry a `→ tracked at intracardiac-platform Phase X` annotation.
 
-Scope (recap; see `docs/schemas/` for the per-schema human-readable
-contract and `project/schema_evolution.md` for the versioning policy):
+## Phase 1.5 — sim-realism
 
-- Seven schemas in `src/myocard_egm_contracts/schemas/`:
-  `synthetic_bank` (HDF5 bank of simulated traces),
-  `iafdb_bank` (HDF5 bank of IAFDB-derived calibrated segments),
-  `noise_bank` (HDF5 bank of IAFDB-derived noise segments),
-  `noise_bank_run_record` (JSON sidecar capturing noise extraction
-  provenance), `training_run_record` (`run.json` schema for training
-  runs), `training_metrics` (CSV column contract for per-epoch
-  metrics + the in-memory metric bundle), `egm_class_model_metadata`
-  (deployment-time sidecar paired with each exported ONNX).
-- `datamodel-code-generator` Python Pydantic codegen wired into
-  `codegen/gen_python.py`; CI runs the script and asserts a clean
-  diff against the committed `_generated/python/` so schema-vs-code
-  drift can't slip through.
-- C++ codegen stub at `codegen/gen_cpp.py` — raises
-  `NotImplementedError` referencing [[feedback-schemas-json-schema-first]];
-  wired up when the C++ deployment chat lands (Phase 6 TensorRT).
-- `validators/` package — `validate_synthetic_bank(path)`,
-  `validate_iafdb_bank(path)`, etc. Each opens the actual file
-  (HDF5 / CSV / JSON), maps to the JSON-Schema-shape envelope, runs
-  `jsonschema` validation, returns a typed `ValidationResult`.
-- `schema_info` API (added v0.1.1) — consumers like egm-data import
-  schema-level metadata (default fs_hz constants, version strings,
-  field names) rather than redefining them locally.
-- Most recent change (v0.4.0): redesigned `egm_class_model_metadata`
-  for per-trace normalization (`zscore` / `zero2one` / `none`). The
-  earlier per-channel mean/std arrays were dropped as ill-suited to
-  the per-trace gain-invariance the v1 classifier wants.
+### `iafdb_bank` 1.3 — audit-report sidecar pointer
 
-## Shipped after v0.4.0
+Add an optional `run_record_path` field to `iafdb_bank` attrs so the healthy bank can carry a
+paired JSON sidecar of per-record diagnostics, symmetric with how `noise_bank` already pairs
+with `noise_bank_run_record`. The sidecar schema itself is either a new top-level
+`iafdb_bank_run_record` or a reuse of the `noise_bank_run_record` structure — decide during
+implementation. (`iafdb_bank` 1.2 was consumed by the v0.5.0 `bank_id` field, so this is 1.3.)
 
-- **v0.4.1** — removed the `hybrid_eval_metrics` schema (untenable
-  label-free eval; see `project/known_issues.md`).
-- **v0.5.0** — cross-artifact linkage (see the v0.5.0 section below).
-- **v0.5.1** — export the `common` module (`ArtifactId` / `FigureId` /
-  `PaperId`) from the public API so consumers (egm-data, producers) can
-  validate ids via the shared types. Export-only; no schema change, no
-  codegen change.
-- **v0.5.2** — artifact-role vocabulary: a generated `Role` enum + id-prefix →
-  role map (`ROLE_PREFIXES`), single-sourced in `codegen/roles.json` and emitted
-  to `_generated/python/roles.py` by `gen_python.py` (C++ later, same source),
-  plus a hand-written `role_of()` classifier over them. Consumers derive an
-  artifact's role from its id one way instead of re-hardcoding prefixes. New
-  codegen input; no schema change.
-- **v0.5.3** — the `ArtifactId` date suffix is now optional
-  (`<role>_<name>[_YYYY-MM-DD][_vN]`): auto-derived ids still stamp the
-  creation date, but a hand-set id (e.g. a config `bank_id` override) may
-  omit it. One-line pattern relaxation in `common.schema.json`; every model
-  that inlines the pattern regenerates, but the change is backward-compatible
-  (every existing dated id still validates). Common-only bump — no per-schema
-  `schema_version` change.
+> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5. Ships with
+> iafdb-pipeline's per-record audit reports + the egm-data sidecar reader/writer.
 
-### Deferred — align HeldOutTest.metrics to EpochRecord.val_metrics — component-internal
+### `noise_bank` 1.1 — `calibration_scalar` per-trace column (+ `bank_id` attr)
 
-The `training_run_record` schema's `HeldOutTest.metrics` field shape
-drifted slightly from `EpochRecord.val_metrics` during the v0.3.x
-training-side rewrite — both should carry the same scalar bundle
-shape (auroc, accuracy, f1, precision, recall, ece, confusion,
-reliability) so consumers (egm-viewer, future egm-studio) can render
-them with one code path. Additive alignment; no consumer breakage
-expected. (Was tentatively slated for v0.4.1, but that number shipped
-the hybrid removal — re-target to a future minor.)
+Add an optional `calibration_scalar` per-trace column so iafdb-pipeline's opt-in noise-side
+calibration can be expressed without breaking older readers (default NaN = uncalibrated;
+explicit scalar = gain applied before extraction). Batch in the **`bank_id` HDF5 attr** (+ a
+link to the run record) here too, so egm-studio's Noise view can read a noise bank's stable id
+from the `.h5` itself instead of the sibling run-record sidecar.
 
-> → Component-internal (task #275). Schedule when convenient; doesn't gate a phase.
+> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5. Pairs with
+> iafdb-pipeline's opt-in noise calibration; the `bank_id`-attr half is a refactor-cleanup
+> batch item (below).
 
-## v0.5.0 — current release (shipped)
+### `noise_bank_run_record` 1.2 — `per_trace_provenance.lead`
 
-Cross-artifact linkage — organizing a phase's artifacts. See
-`intracardiac-platform/project/cross_artifact_linkage_design.md`.
-
-- Three new JSON schemas: `phase_manifest` (per-phase shallow index of
-  every artifact, with `egm_banks` + `noise_banks` bank sections),
-  `observation` (a recorded discovery, optionally pinning traces),
-  `figure_spec` (declarative spec for one publication figure).
-- New `common` shared-`$defs` schema holding the stable cross-artifact id
-  patterns (`ArtifactId` / `FigureId` / `PaperId`), referenced cross-file
-  so each pattern is defined exactly once. Validators gained a
-  `referencing.Registry` to resolve those refs.
-- Optional stable-id fields added to existing schemas (all optional
-  in-schema; egm-data enforces on new writes):
-  `synthetic_bank` 1.1 (+`bank_id`), `iafdb_bank` 1.2 (+`bank_id`),
-  `noise_bank_run_record` 1.1 (+`bank_id`), `training_run_record` 1.1
-  (+`run_id` / `trained_on_bank_id` / `produced_model_id`),
-  `egm_class_model_metadata` 1.2 (+`model_id`).
-- No new runtime deps — the linkage formats are JSON, not YAML.
-
-## v0.6.0+ — concrete next steps
-
-These are sized for "could land in one focused PR each" but several
-are gated on downstream consumers' needs landing first. Order is
-suggestive; pick by which Phase is closest.
-
-### Polymorphic stimulation schema (replace `stim_edge`) — Phase 2
-
-The current `synthetic_bank` schema carries `stim_edge` as a single
-enum field describing how each simulation was stimulated. That works
-for v1's single `PlanarEdgeStimulus` but doesn't extend to the
-richer activation sources scheduled into Phase 1.5 / Phase 2 / Phase 4
-(`PointStimulus`, `S1S2Protocol`, `PacingTrain`, multi-edge stim).
-
-The plan: replace `stim_edge` with a polymorphic `stimulation`
-object (type discriminator + per-type params). Coordinated bump:
-egm-contracts v0.6.0 + egm-data (cascade) + synthetic-egm-pipeline
-in one release (v0.5.0 was taken by the cross-artifact-linkage work).
-Schema migration noted in `project/schema_evolution.md`.
-
-> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 2 (first-publish milestone — bundling the schema bump here avoids fragmenting the polymorphic-stimulation work across multiple releases). The producer-side scope is in synthetic-egm-pipeline's roadmap under "Additional activation sources."
-
-### `iafdb_bank` 1.3 — audit-report sidecar pointer — Phase 1.5
-
-> Note: `iafdb_bank` 1.2 was used for the optional `bank_id` field in
-> v0.5.0, so this audit-sidecar work is now 1.3.
-
-Add an optional `run_record_path` field to the `iafdb_bank` schema
-attrs so the healthy bank can carry a paired JSON sidecar with
-per-record diagnostic data, symmetric with how `noise_bank` already
-pairs with `noise_bank_run_record`. The sidecar schema itself is
-either a new top-level `iafdb_bank_run_record` schema or a reuse of
-the existing `noise_bank_run_record` structure — decide during
-implementation.
-
-> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5. Pairs with iafdb-pipeline's per-record audit reports work; ships together.
-
-### `noise_bank` 1.1 — `calibration_scalar` per-trace column — Phase 1.5
-
-Add an optional `calibration_scalar` per-trace column so iafdb-pipeline's
-opt-in noise-side calibration can be expressed in the schema without
-breaking older readers. Default = NaN means "uncalibrated"; explicit
-scalar means "this much gain was applied before the noise segment was
-extracted."
-
-> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5. Pairs with iafdb-pipeline's opt-in noise-calibration roadmap item.
-
-### `noise_bank_run_record` 1.2 — `per_trace_provenance.lead` — Phase 1.5
-
-> Note: `noise_bank_run_record` 1.1 was used for the optional `bank_id`
-> field in v0.5.0, so this work is now 1.2.
-
-Add a `lead` field to the per-trace provenance dict so the noise sidecar
-records which surface lead won the calibration's priority-order
-selection (when noise-side calibration is on). Ships with the
-calibration_scalar work above.
+Add a `lead` field to the per-trace provenance dict recording which surface lead won the
+calibration's priority-order selection (when noise-side calibration is on). Ships with the
+`calibration_scalar` work. (1.1 was consumed by the v0.5.0 `bank_id` field, so this is 1.2.)
 
 > → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5.
 
-### `egm_features_bank` schema — Refactor Step 4 (egm-features)
+## Phase 2 — multiclass severity
 
-When `egm-features` ships and emits per-trace feature bundles, the
-output format wants a contract. Likely shape: HDF5 bank with one
-column per feature + a feature-name list in attrs + a hash of the
-source bank for traceability. Same convention as the other banks
-(traces table + per-trace metadata).
+### Polymorphic `stimulation` schema (replace `stim_edge`)
 
-> → Tracked at `intracardiac-platform/project/refactor_checklist.md` Phase 4 (egm-features). Don't land the schema until the producer's feature list stabilizes; otherwise the schema churns.
+`synthetic_bank` carries `stim_edge` as a single enum — fine for v1's one `PlanarEdgeStimulus`,
+but it doesn't extend to the richer activation sources scheduled into Phase 1.5 / 2 / 4
+(`PointStimulus`, `S1S2Protocol`, `PacingTrain`, multi-edge). Replace it with a polymorphic
+`stimulation` object (type discriminator + per-type params). **Coordinated release** —
+egm-contracts v0.6.0 + egm-data cascade + synthetic-egm-pipeline — bundled at the Phase 2
+first-publish inflection so the work doesn't fragment across releases (v0.5.0 was taken by the
+linkage wave). Migration noted in `schema_evolution.md`.
 
-### 3D geometry schema — Phase 7 (3D substrate)
+> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 2. Producer-side scope is
+> in synthetic-egm-pipeline's roadmap under "Additional activation sources."
 
-When synthetic-egm-pipeline grows `AtrialMesh3D` for the Phase 7 3D
-substrate work, the `synthetic_bank` schema needs to express which
-mesh produced the simulation. Likely shape: `mesh_path` (relative
-reference to a `.pts/.elem/.lon` triple in an external mesh repo or
-local mesh directory) + a content hash for reproducibility. Bigger
-question — does the project want a separate `atrial_mesh_3d` schema
-defining the mesh format itself, or do we delegate to existing
-unstructured-mesh formats (e.g. openCARP's native `.pts/.elem/.lon`)?
-Decide during the Phase 7 kickoff.
+## Phase 4 — feature banks (egm-features / Refactor Step 4)
 
-> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 7.
+### `egm_features_bank` schema
 
-### C++ codegen activation — Phase 6 (TensorRT deployment)
+When egm-features emits per-trace feature bundles, the output needs a contract. Likely shape:
+an HDF5 bank with one column per feature + a feature-name list in attrs + a hash of the source
+bank for traceability (same convention as the other banks). **Don't land the schema until the
+producer's feature list stabilizes** — otherwise it churns.
 
-The `codegen/gen_cpp.py` stub gets filled in here. Likely toolchain:
-`quicktype` or `nlohmann/json-schema-codegen` emitting headers into
-`_generated/cpp/`. CI gains a parallel C++ drift check. Consumer:
-the C++/TensorRT runtime that loads `egm_class_model_metadata.json`
-and applies the documented preprocessing pipeline.
+> → Tracked at `intracardiac-platform/project/refactor_checklist.md` Phase 4 (egm-features).
+
+## Phase 6 — C++ / TensorRT deployment
+
+### C++ codegen activation
+
+Fill in the `codegen/gen_cpp.py` stub — likely `quicktype` or `nlohmann/json-schema-codegen`
+emitting headers into `_generated/cpp/`, with a parallel C++ codegen-drift check in CI. The
+consumer is the C++/TensorRT runtime that loads `egm_class_model_metadata.json` and applies the
+documented preprocessing.
 
 > → Tracked at `intracardiac-platform/project/project_plan.md` Phase 6.
 
-### Normalization scheme expansion (`robust_zscore`, `meanvar`) — open question
+## Phase 7 — 3D geometry
 
-The `egm_class_model_metadata` schema currently admits
-`zscore` / `zero2one` / `none` for per-trace normalization. Future
-classifier work might want `robust_zscore` (median + MAD) or
-`meanvar` (with stored per-channel stats once we go multi-channel).
-Add when a real model needs them — speculative until then. See
-egm-classifier roadmap "Open architectural questions for later."
+### 3D geometry schema
 
-> → Component-internal / deferred. No phase home until a consumer needs it.
+When synthetic-egm-pipeline grows `AtrialMesh3D`, `synthetic_bank` needs to express which mesh
+produced a simulation — likely a `mesh_path` (relative reference to a `.pts/.elem/.lon` triple)
++ a content hash. Bigger question: a dedicated `atrial_mesh_3d` schema for the mesh format
+itself, or delegate to openCARP's native format. Decide at Phase 7 kickoff.
+
+> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 7.
+
+## Backlog (unscheduled — promoted into a phase at a planning session)
+
+### Align `HeldOutTest.metrics` to `EpochRecord.val_metrics`
+
+The `training_run_record` schema's `HeldOutTest.metrics` shape drifted slightly from
+`EpochRecord.val_metrics` during the v0.3.x training-side rewrite; both should carry the same
+scalar bundle (auroc, accuracy, f1, precision, recall, ece, confusion, reliability) so
+consumers render them with one code path. Additive alignment, no consumer breakage expected.
+Component-internal (was task #275); doesn't gate a phase.
+
+### Refactor-cleanup batch (from the egm-studio B10g review)
+
+Three small, backward-compatible schema changes egm-studio deferred, to land together:
+
+- Make `produced_by_package` / `produced_by_version` **optional** on `phase_manifest` entries,
+  so egm-studio can index a manually-added producer artifact without sentinel values
+  (`"unknown"` / `"0"`).
+- Add an **active view / tab** field to the `observation` `view_state`, so *Open observation*
+  can restore the active flow + sub-tab, not just banks + filter + selection.
+- The `noise_bank` **`bank_id` attr** (grouped with the `noise_bank` 1.1 work above).
+
+### Normalization-scheme expansion (`robust_zscore`, `meanvar`)
+
+`egm_class_model_metadata` currently admits `zscore` / `zero2one` / `none`. Future classifier
+work might want `robust_zscore` (median + MAD) or `meanvar` (stored per-channel stats once
+multi-channel). Add when a real model needs it — speculative until then (see egm-classifier's
+"Open architectural questions").
 
 ## Schema bumps to coordinate (cascade order)
 
 When any schema in this repo changes, the downstream cascade is fixed:
 
 1. **egm-contracts** ships the new schema version. Tag + push.
-2. **egm-data** updates its readers + writers to satisfy the new
-   shape. Bumps its pinned `myocard-egm-contracts` version. Tag + push.
-3. **Producers** (iafdb-pipeline, synthetic-egm-pipeline) bump their
-   pinned `myocard-egm-data` + `myocard-egm-contracts` versions,
-   update any producer-side code, run round-trip tests via the
-   validators. Tag + push.
-4. **Consumers** (egm-classifier, future egm-studio) bump their pins,
-   update consumer-side code if the schema change affects fields they
-   read.
+2. **egm-data** updates its readers + writers to satisfy the new shape and bumps its pinned
+   `myocard-egm-contracts`. Tag + push.
+3. **Producers** (iafdb-pipeline, synthetic-egm-pipeline) bump their `myocard-egm-data` +
+   `myocard-egm-contracts` pins, update producer-side code, round-trip-test via the validators.
+   Tag + push.
+4. **Consumers** (egm-classifier, egm-studio) bump their pins and update any code that reads the
+   changed fields.
 
-This is the canonical sequence regardless of which schema is
-changing. The "Schema bumps to coordinate" section in iafdb-pipeline's
-roadmap (which historically listed the iafdb_bank 1.2 / noise_bank 1.1
-items) is now redundant — those items live here; iafdb-pipeline's
-section will be pruned to just "see egm-contracts roadmap for the
-next bumps + cascade order" in the 2026-06-23 audit cleanup.
+This sequence holds regardless of which schema changes. It is the canonical reference the
+egm-data and iafdb-pipeline roadmaps point back to instead of re-listing bumps.
 
 ## Won't-do (out of scope, but documented to save the question)
 
-- **No HDF5 / CSV / JSON I/O code in this repo.** Schemas + validators
-  + codegen scripts only. Every read and write goes through
-  `myocard-egm-data` (or `myocard-iafdb-pipeline` and
-  `myocard-synthetic-egm-pipeline` for producer-side writes). If this
-  repo's source tree grows an `h5py` import outside the validators,
-  it's a smell.
-- **No torch dependency.** Pydantic, jsonschema, numpy, h5py are the
-  runtime deps; no PyTorch. The schema layer is what makes a
-  no-torch deployment runtime possible (C++ deployment doesn't need
-  Python's ML stack to read the model metadata sidecar).
-- **No producer- or consumer-specific helpers.** "Build the Pydantic
-  model from a dict" is the API surface; if a consumer needs
-  conversion helpers, those belong in egm-data, not here.
-- **No new schemas for one-off experiments.** Each schema is a stable
-  cross-component interface — if only one consumer needs it, the
-  data lives inside that consumer until a second consumer
+- **No HDF5 / CSV / JSON I/O code in this repo.** Schemas + validators + codegen scripts only;
+  every read and write goes through `myocard-egm-data` (or the producers). An `h5py` import
+  outside the validators is a smell.
+- **No torch dependency.** Pydantic, jsonschema, numpy, h5py are the runtime deps — the
+  no-torch schema layer is exactly what makes a C++ deployment runtime able to read the model
+  metadata sidecar without Python's ML stack.
+- **No producer- or consumer-specific helpers.** "Build the Pydantic model from a dict" is the
+  API surface; conversion helpers belong in egm-data.
+- **No new schemas for one-off experiments.** Each schema is a stable cross-component
+  interface; if only one consumer needs it, the data lives inside that consumer until a second
   materializes.
 
 ## Open architectural questions for later
 
-- **Should `synthetic_bank` and `iafdb_bank` converge on a shared
-  base schema?** Both carry per-trace signal + per-trace metadata;
-  the differences are which metadata fields exist. A JSON-Schema
-  `allOf` composition could factor out the shared shape. Today the
-  two stay separate because the producers' code paths are different
-  enough that schema-side composition isn't yet load-bearing.
-- **Should the validators ship as a separate distribution
-  (`myocard-egm-contracts-validators`) so the C++ deployment doesn't
-  pull `jsonschema`?** Today the validators are always installed
-  with the schemas. Splitting is speculative; revisit if C++ runtime
-  packaging becomes painful.
-- **Should `schema_info` grow a typed schema-version comparison API**
-  (e.g. `is_compatible(declared, requested) -> bool`) so consumers
-  don't roll their own SemVer parsing? Add when a third consumer
-  re-implements this.
+- **Should `synthetic_bank` and `iafdb_bank` converge on a shared base schema?** Both carry
+  per-trace signal + metadata; a JSON-Schema `allOf` could factor out the shared shape. They
+  stay separate today because the producers' code paths differ enough that schema-side
+  composition isn't yet load-bearing.
+- **Should the validators ship as a separate distribution** (`myocard-egm-contracts-validators`)
+  so the C++ deployment doesn't pull `jsonschema`? Speculative; revisit if C++ runtime packaging
+  gets painful.
+- **Should `schema_info` grow a typed schema-version comparison API** (`is_compatible(declared,
+  requested) -> bool`) so consumers don't roll their own SemVer parsing? Add when a third
+  consumer re-implements it.
