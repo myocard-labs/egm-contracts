@@ -51,6 +51,10 @@ calibration's priority-order selection (when noise-side calibration is on). Ship
 
 ### Polymorphic `stimulation` schema (replace `stim_edge`)
 
+> **Pulled forward to Phase 1.5 (2026-07-23)** — SEP6 (multi-edge) + SEP7 (`PointStimulus` / `S1S2Protocol`)
+> need it; it's **Wave-1** of the 1.5 coordinated contracts bump (see
+> `intracardiac-platform/phases/phase_1_5/design.md` §5). The "Phase 2" framing below is superseded.
+
 `synthetic_bank` carries `stim_edge` as a single enum — fine for v1's one `PlanarEdgeStimulus`,
 but it doesn't extend to the richer activation sources scheduled into Phase 1.5 / 2 / 4
 (`PointStimulus`, `S1S2Protocol`, `PacingTrain`, multi-edge). Replace it with a polymorphic
