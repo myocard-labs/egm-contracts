@@ -2,7 +2,7 @@
 
 **Repo:** egm-contracts · **Phase:** 1.5
 **Phase design doc:** `intracardiac-platform/phases/phase_1_5/design.md`
-**Status:** planning · **Progress:** 0/13 steps done
+**Status:** in progress · **Progress:** 2/13 steps done (S1 · S2)
 **Repo estimate:** **14–29.5 h** active (Cx **15** points) — the project-lead reads this into design §6;
 this chat does not edit the design doc.
 
@@ -38,6 +38,31 @@ relative manifest paths) is **egm-studio's**, not ours — see the open item on 
 θ-escalation likewise adds no issue here: the θ-spec is already CON1, and putting θ into
 `ClassifierTrace.trace_metadata` is egm-data behavior on an existing `dict[str, Any]`, not a schema
 change.
+
+## Dependencies — what this repo's issues wait on
+
+egm-contracts sits at the **root of the dependency DAG**, so this table is empty by construction: no
+step here waits on another repo. The traffic runs the other way — every Wave-1 adoption (DAT1 · DAT3 ·
+SEP12 · STU6 · IAF3 · CLF5) waits on the v0.6.0 tag, which is why this repo goes first in §7 Track A.
+
+| This repo's issue/step | Depends on (repo · issue / artifact) | Why | Status |
+|---|---|---|---|
+| — | none | root of the DAG; nothing upstream of the schemas | n/a |
+
+One **inbound** dependency is worth naming even though it isn't mine to track: egm-data's DAT1 writer +
+reader, the four producer/consumer migrations, and everything in Waves 2–3 that touches a changed type
+are all gated on the tag. That makes S12 (the pre-PR run) the wave's real bottleneck, not S1.
+
+## Work remaining / open items
+
+| Item | Kind | Blocked on | Status |
+|---|---|---|---|
+| S3–S12 not started (S1 landed with the plan commits; S2 done 2026-07-30) | step | — | open |
+| Confirm the polymorphic `oneOf` + `const` discriminator codegens cleanly through datamodel-code-generator | open-question | — (resolved inside S7; fallback noted in Design notes) | open |
+
+No cross-chat blockers: B17 was answered (CL-051), the join key needs no CON change (CL-012 → CL-024
+§3), and both `activation_position` flow-downs are folded in (CL-053, CL-062). Nothing here waits on
+another chat.
 
 ## Design notes
 
@@ -88,7 +113,7 @@ Every step ends green: `ruff format src tests` → `ruff check src tests` → `m
 - **Verify:** `git status` clean on `development`.
 - **Depends on:** none.
 
-### S2 — `common.schema.json` — role-prefix validation (B16 / P3) + shared `ActivationPosition` ☐ (1.5–3 h)
+### S2 — `common.schema.json` — role-prefix validation (B16 / P3) + shared `ActivationPosition` ✅ (1.5–3 h)
 - **Change:** tighten the `ArtifactId` pattern from `^[a-z]+_` to an explicit alternation of the eight
   known artifact roles (`tbank_` / `ptbank_` / `lpred_` / `upred_` / `nbank_` / `run_` / `model_` /
   `obs_`); update the description. Re-run codegen (nine model files inline the pattern). New test

@@ -101,6 +101,34 @@ itself, or delegate to openCARP's native format. Decide at Phase 7 kickoff.
 
 ## Backlog (unscheduled — promoted into a phase at a planning session)
 
+### Reevaluate the stable-ID scheme — which artifacts get which pattern
+
+Today's split is three patterns: `ArtifactId` covers banks / runs / models / observations, while
+figures and papers carry `FigureId` / `PaperId`. The boundary is **historical rather than
+principled** (Daniel, 2026-07-30) — it grew from figure ids needing hyphenated inventory slugs
+(`fig_F-1-5-2_…`) and no date, so they got their own grammar, and papers followed. What's worth
+revisiting:
+
+- **The name misleads.** "ArtifactId" reads as "the id of any artifact"; it means "the id of a
+  pipeline *data* artifact." A reader reasonably expects `fig_` to validate against it.
+- **The grammars disagree.** `FigureId` allows hyphens + uppercase and carries no date/version
+  suffix; `ArtifactId` allows hyphens only inside the date and adds `_vN`. The same id can be
+  valid under one and invalid under the other, in both directions.
+- **`paper_` is under-specified.** Papers aren't yet defined the way figures are; when they are,
+  the choice is whether `PaperId` grows date/version semantics or folds into the artifact
+  grammar — better decided deliberately than by precedent.
+
+Options to weigh when it's picked up: keep three patterns but **rename** for honesty
+(`DataArtifactId`); **unify** on one grammar (breaks existing hyphenated figure ids); or keep them
+separate and add an **`AnyStableId`** (`anyOf` of the three) for fields that genuinely accept any
+stable id.
+
+> **Not a pure egm-contracts call** — the ID scheme is
+> `intracardiac-platform/project/cross_artifact_linkage_design.md` §1, so it needs the
+> project-lead; raised to them for the platform backlog. Deliberately **not** fixed in Phase 1.5:
+> the v0.6.0 bump narrowed `ArtifactId` to the eight known roles (B16) without touching the
+> scheme's shape.
+
 ### Align `HeldOutTest.metrics` to `EpochRecord.val_metrics`
 
 The `training_run_record` schema's `HeldOutTest.metrics` shape drifted slightly from

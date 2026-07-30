@@ -218,6 +218,24 @@ introduction version.
 
 ### common
 
+- **(v0.6.0)** — two changes, both Phase-1.5 Wave 1:
+  - **`ArtifactId` role-prefix validation (B16)** — pattern tightened from
+    `^[a-z]+_...` to an explicit alternation of the eight known artifact roles
+    (`tbank|ptbank|lpred|upred|nbank|run|model|obs`). `fig_` / `paper_` are
+    excluded deliberately: figures and papers carry `FigureId` / `PaperId`.
+    **A narrowing, not a relaxation** — an id with an invented or typo'd prefix
+    that used to validate now fails, which is the point (previously it surfaced
+    downstream as an unclassifiable artifact instead). Every id in use still
+    validates. The vocabulary stays single-sourced in `codegen/roles.json`; the
+    schema remains hand-written, with `tests/test_roles.py` asserting the
+    alternation matches that source so the two can't drift.
+  - **`ActivationPosition` added** — the `[0,1]` activation fraction shared by
+    `iafdb_bank` and `synthetic_bank`, defined once here and `$ref`'d by both so
+    the two corpora cannot diverge (their position distributions get compared to
+    each other; a per-schema copy is exactly how that comparison would silently
+    go wrong).
+  - Common-only: no document schema's `schema_version` changes on account of
+    these, though all regenerate since they inline the patterns.
 - **(v0.5.3)** — `ArtifactId` date suffix made optional: pattern relaxed from
   `^[a-z]+_[a-z0-9_]+_\d{4}-\d{2}-\d{2}(_v\d+)?$` to
   `^[a-z]+_[a-z0-9_]+(_\d{4}-\d{2}-\d{2})?(_v\d+)?$` so a hand-set id (e.g. a

@@ -11,6 +11,31 @@ changed per release and names the affected `schema_version`s. Entries are per-ve
 `v0.5.0` on; the beta that built the seven-schema baseline (`v0.1.0`–`v0.4.1`) is summarized
 under [Earlier versions](#earlier-versions).
 
+## [Unreleased]
+
+Phase-1.5 Wave 1 — the coordinated **v0.6.0** schema bump. Accumulating; ships as one release
+(the whole constellation re-pins to it, so it lands as a single tag).
+
+### Added
+
+- **`common.ActivationPosition`** — the shared `[0,1]` activation-position fraction (`idx =
+  round(frac * (T - 1))`), defined once in `common.schema.json` and `$ref`'d by both
+  `iafdb_bank` and `synthetic_bank`, so the synthetic↔IAFDB position distributions are compared
+  stored-vs-stored without the two corpora being able to drift apart. Optional-in-schema /
+  required-on-write in activation mode: Wave-1 banks are written before the splitters populate
+  it.
+
+### Changed
+
+- **`ArtifactId` now validates the role prefix** — the pattern took any `[a-z]+_` prefix; it
+  now carries an explicit alternation of the eight known artifact roles (`tbank_` / `ptbank_` /
+  `lpred_` / `upred_` / `nbank_` / `run_` / `model_` / `obs_`). `fig_` / `paper_` stay out:
+  those are `FigureId` / `PaperId`. **Narrowing** — an id with an invented or mistyped prefix
+  now fails validation instead of surfacing downstream as an unclassifiable artifact; every id
+  in use is unaffected. The vocabulary remains single-sourced in `codegen/roles.json`, with a
+  test asserting the pattern's alternation matches it. **Common-only bump — no per-schema
+  `schema_version` change** (all models regenerate, since they inline the pattern).
+
 ## [0.5.3] — 2026-07-07
 
 ### Changed
