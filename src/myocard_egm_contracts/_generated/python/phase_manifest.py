@@ -43,10 +43,11 @@ class UsageTag(Enum):
 
 class ArtifactId(RootModel[str]):
     root: str = Field(
-        ..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The role prefix MUST be one of the known artifact roles (tbank_ / ptbank_ / lpred_ / upred_ / nbank_ / run_ / model_ / obs_) — the vocabulary is single-sourced in codegen/roles.json, and tests/test_roles.py asserts this pattern's alternation matches it (fig_ and paper_ are excluded here: figures and papers carry FigureId / PaperId, which are not ArtifactIds). Prefixes encode the artifact's role in the ML pipeline, not its data origin. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
 
 
@@ -54,6 +55,13 @@ class FigureId(RootModel[str]):
     root: str = Field(..., pattern="^fig_[A-Za-z0-9_\\-]+$")
     """
     Figure identifier. Slug-based (hyphens allowed, no date suffix), so it does NOT match the dated ArtifactId pattern. e.g. fig_feature_distributions_synth_vs_iafdb.
+    """
+
+
+class ActivationPosition(RootModel[float]):
+    root: float = Field(..., ge=0.0, le=1.0)
+    """
+    Realized position of the activation within a trace, as a fraction of the trace: 0.0 = first sample, 1.0 = last sample. Rate- and length-independent by construction; convert at point of use with idx = round(frac * (T - 1)). This is the position the activation-aware splitter/crop ACTUALLY produced (the anchor it placed), not a value measured from the waveform afterwards - a consumer that wants the measured dV/dt-max position computes it with egm-features instead. Stored per trace by both corpora (iafdb_bank via IAF1, synthetic_bank via SEP2) so the synthetic-vs-IAFDB position distributions are compared stored-vs-stored rather than one stored against one recomputed. Defined once here and $ref'd by both banks so the two cannot drift. OPTIONAL-IN-SCHEMA / REQUIRED-ON-WRITE in activation mode: the Phase-1.5 Wave-1 schema migration writes banks before the splitters populate it, so absence is valid; producers enforce presence once they emit it.
     """
 
 
@@ -65,9 +73,12 @@ class NoiseBankEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
+    id: str = Field(
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
+    )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The role prefix MUST be one of the known artifact roles (tbank_ / ptbank_ / lpred_ / upred_ / nbank_ / run_ / model_ / obs_) — the vocabulary is single-sourced in codegen/roles.json, and tests/test_roles.py asserts this pattern's alternation matches it (fig_ and paper_ are excluded here: figures and papers carry FigureId / PaperId, which are not ArtifactIds). Prefixes encode the artifact's role in the ML pipeline, not its data origin. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
     produced_by_package: str
@@ -87,21 +98,26 @@ class TrainingRunEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
+    id: str = Field(
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
+    )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The role prefix MUST be one of the known artifact roles (tbank_ / ptbank_ / lpred_ / upred_ / nbank_ / run_ / model_ / obs_) — the vocabulary is single-sourced in codegen/roles.json, and tests/test_roles.py asserts this pattern's alternation matches it (fig_ and paper_ are excluded here: figures and papers carry FigureId / PaperId, which are not ArtifactIds). Prefixes encode the artifact's role in the ML pipeline, not its data origin. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
     produced_by_package: str
     produced_by_version: str
     trained_on_bank: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Relationship: run -> training bank (future edge TRAINED_ON).
     """
     produced_model: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Relationship: run -> model (future edge PRODUCED).
@@ -117,15 +133,19 @@ class ModelEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
+    id: str = Field(
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
+    )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The role prefix MUST be one of the known artifact roles (tbank_ / ptbank_ / lpred_ / upred_ / nbank_ / run_ / model_ / obs_) — the vocabulary is single-sourced in codegen/roles.json, and tests/test_roles.py asserts this pattern's alternation matches it (fig_ and paper_ are excluded here: figures and papers carry FigureId / PaperId, which are not ArtifactIds). Prefixes encode the artifact's role in the ML pipeline, not its data origin. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
     produced_by_package: str
     produced_by_version: str
     trained_from_run: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Relationship: model -> run (future edge TRAINED_FROM, inverse of PRODUCED).
@@ -145,9 +165,12 @@ class ObservationEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
+    id: str = Field(
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
+    )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The role prefix MUST be one of the known artifact roles (tbank_ / ptbank_ / lpred_ / upred_ / nbank_ / run_ / model_ / obs_) — the vocabulary is single-sourced in codegen/roles.json, and tests/test_roles.py asserts this pattern's alternation matches it (fig_ and paper_ are excluded here: figures and papers carry FigureId / PaperId, which are not ArtifactIds). Prefixes encode the artifact's role in the ML pipeline, not its data origin. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
     produced_by_package: str
@@ -226,9 +249,12 @@ class EgmBankEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
+    id: str = Field(
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
+    )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The role prefix MUST be one of the known artifact roles (tbank_ / ptbank_ / lpred_ / upred_ / nbank_ / run_ / model_ / obs_) — the vocabulary is single-sourced in codegen/roles.json, and tests/test_roles.py asserts this pattern's alternation matches it (fig_ and paper_ are excluded here: figures and papers carry FigureId / PaperId, which are not ArtifactIds). Prefixes encode the artifact's role in the ML pipeline, not its data origin. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
     """
@@ -243,13 +269,15 @@ class EgmBankEntry(BaseModel):
     Producer version that wrote the artifact (e.g. v0.2.0).
     """
     model: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Prediction banks only: the model that produced the predictions (future edge EVALUATED_BY).
     """
     source_bank: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Prediction banks only: the EGM bank the predictions were computed on (future edge REFERENCES_SOURCE).

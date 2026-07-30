@@ -135,6 +135,13 @@ class PaperId(RootModel[str]):
     """
 
 
+class ActivationPosition(RootModel[float]):
+    root: float = Field(..., ge=0.0, le=1.0)
+    """
+    Realized position of the activation within a trace, as a fraction of the trace: 0.0 = first sample, 1.0 = last sample. Rate- and length-independent by construction; convert at point of use with idx = round(frac * (T - 1)). This is the position the activation-aware splitter/crop ACTUALLY produced (the anchor it placed), not a value measured from the waveform afterwards - a consumer that wants the measured dV/dt-max position computes it with egm-features instead. Stored per trace by both corpora (iafdb_bank via IAF1, synthetic_bank via SEP2) so the synthetic-vs-IAFDB position distributions are compared stored-vs-stored rather than one stored against one recomputed. Defined once here and $ref'd by both banks so the two cannot drift. OPTIONAL-IN-SCHEMA / REQUIRED-ON-WRITE in activation mode: the Phase-1.5 Wave-1 schema migration writes banks before the splitters populate it, so absence is valid; producers enforce presence once they emit it.
+    """
+
+
 class NoiseBankRunRecord(BaseModel):
     """
     Provenance sidecar for a NoiseBank HDF5 file: how the noise segments were extracted (calibration, threshold strategy, filter band, windowing) plus per-trace provenance arrays aligned to the bank's traces. Schema version 1.1. Written as a sibling JSON file next to the bank with a matching name stem (e.g. iafdb_noise_v1.h5 + iafdb_noise_v1_run_record.json), following the same convention as metrics.csv + run.json in egm-classifier. The mixer never opens this file; debuggers, reproducibility audits, and the white paper's methods section do. 1.1 (from 1.0) added the optional `bank_id` stable-artifact identifier for the noise bank (egm-contracts v0.5.0, cross-artifact linkage); the design puts the noise bank's stable ID on this sidecar rather than the HDF5.
@@ -152,7 +159,8 @@ class NoiseBankRunRecord(BaseModel):
     ISO-8601 UTC timestamp captured at write time. Should match (or closely follow) the sibling bank's created_utc.
     """
     bank_id: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Stable artifact ID for the noise bank this sidecar describes, e.g. 'nbank_iafdb_2026-06-15'. Optional for legacy records written before egm-contracts v0.5.0; egm-data stamps it on every new noise bank (enforced at write time, not by this schema). Added 1.1.

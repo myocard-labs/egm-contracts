@@ -96,6 +96,13 @@ class PaperId(RootModel[str]):
     """
 
 
+class ActivationPosition(RootModel[float]):
+    root: float = Field(..., ge=0.0, le=1.0)
+    """
+    Realized position of the activation within a trace, as a fraction of the trace: 0.0 = first sample, 1.0 = last sample. Rate- and length-independent by construction; convert at point of use with idx = round(frac * (T - 1)). This is the position the activation-aware splitter/crop ACTUALLY produced (the anchor it placed), not a value measured from the waveform afterwards - a consumer that wants the measured dV/dt-max position computes it with egm-features instead. Stored per trace by both corpora (iafdb_bank via IAF1, synthetic_bank via SEP2) so the synthetic-vs-IAFDB position distributions are compared stored-vs-stored rather than one stored against one recomputed. Defined once here and $ref'd by both banks so the two cannot drift. OPTIONAL-IN-SCHEMA / REQUIRED-ON-WRITE in activation mode: the Phase-1.5 Wave-1 schema migration writes banks before the splitters populate it, so absence is valid; producers enforce presence once they emit it.
+    """
+
+
 class SyntheticBank(BaseModel):
     """
     Synthetic intracardiac EGM bank (may include real-noise conditioning at the signal level). Schema version 1.1. Maps to an HDF5 file with bank-level root attrs plus a `traces/` group containing per-trace columns. 1.1 (from 1.0) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage).
@@ -113,7 +120,8 @@ class SyntheticBank(BaseModel):
     ISO-8601 UTC timestamp captured at write time.
     """
     bank_id: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Stable artifact ID for this bank, e.g. 'tbank_synthetic_courtemanche_v1_5_2026-06-25'. Optional for legacy banks written before egm-contracts v0.5.0; egm-data stamps it on every new bank (enforced at write time, not by this schema, per the cross-artifact-linkage 'optional-in-schema, required-on-write' decision). Added 1.1.

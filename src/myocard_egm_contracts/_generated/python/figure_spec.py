@@ -47,10 +47,11 @@ class Output(BaseModel):
 
 class ArtifactId(RootModel[str]):
     root: str = Field(
-        ..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The role prefix MUST be one of the known artifact roles (tbank_ / ptbank_ / lpred_ / upred_ / nbank_ / run_ / model_ / obs_) — the vocabulary is single-sourced in codegen/roles.json, and tests/test_roles.py asserts this pattern's alternation matches it (fig_ and paper_ are excluded here: figures and papers carry FigureId / PaperId, which are not ArtifactIds). Prefixes encode the artifact's role in the ML pipeline, not its data origin. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
 
 
@@ -58,6 +59,13 @@ class PaperId(RootModel[str]):
     root: str = Field(..., pattern="^paper_[a-z0-9_]+$")
     """
     Paper identifier (e.g. paper_phase_1_5_realism). Slug-based, no date.
+    """
+
+
+class ActivationPosition(RootModel[float]):
+    root: float = Field(..., ge=0.0, le=1.0)
+    """
+    Realized position of the activation within a trace, as a fraction of the trace: 0.0 = first sample, 1.0 = last sample. Rate- and length-independent by construction; convert at point of use with idx = round(frac * (T - 1)). This is the position the activation-aware splitter/crop ACTUALLY produced (the anchor it placed), not a value measured from the waveform afterwards - a consumer that wants the measured dV/dt-max position computes it with egm-features instead. Stored per trace by both corpora (iafdb_bank via IAF1, synthetic_bank via SEP2) so the synthetic-vs-IAFDB position distributions are compared stored-vs-stored rather than one stored against one recomputed. Defined once here and $ref'd by both banks so the two cannot drift. OPTIONAL-IN-SCHEMA / REQUIRED-ON-WRITE in activation mode: the Phase-1.5 Wave-1 schema migration writes banks before the splitters populate it, so absence is valid; producers enforce presence once they emit it.
     """
 
 
@@ -70,7 +78,8 @@ class Group(BaseModel):
     Human-readable group label shown in the legend.
     """
     bank_id: str = Field(
-        ..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Stable id of the bank supplying this group's data.
