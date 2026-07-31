@@ -2,18 +2,22 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/myocard-labs/egm-contracts/schemas/noise_bank.schema.json",
   "title": "NoiseBank",
-  "description": "Low-amplitude (quiet) bipolar EGM segments used as additive noise by the synthetic-EGM mixer. Schema version 1.0. Intentionally minimal: only the fields the mixer actually consumes are required here. Extraction provenance (calibration scheme, threshold strategy, filter band, per-trace metadata) lives in a sibling noise_bank_run_record.json file. The convention is the same as metrics.csv + run.json in egm-classifier: the two files are written together with matching name stems and the consumer that needs methods opens the sibling.",
+  "description": "Low-amplitude (quiet) bipolar EGM segments used as additive noise by the synthetic-EGM mixer. Schema version 1.1. Intentionally minimal: only the fields the mixer actually consumes are required here. Extraction provenance (calibration scheme, threshold strategy, filter band, per-trace metadata) lives in a sibling noise_bank_run_record.json file. The convention is the same as metrics.csv + run.json in egm-classifier: the two files are written together with matching name stems and the consumer that needs methods opens the sibling. 1.1 (from 1.0) added the optional `bank_id` stable-artifact identifier as a root attr, so a consumer can read the bank's identity from the .h5 itself rather than having to open the sidecar.",
   "type": "object",
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["1.0"],
+      "enum": ["1.1"],
       "description": "Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions."
     },
     "created_utc": {
       "type": "string",
       "format": "date-time",
       "description": "ISO-8601 UTC timestamp captured at write time."
+    },
+    "bank_id": {
+      "$ref": "common.schema.json#/$defs/ArtifactId",
+      "description": "Stable artifact ID for this noise bank, e.g. 'nbank_iafdb_2026-06-15'. Optional for legacy banks written before egm-contracts v0.6.0; egm-data stamps it on every new bank (enforced at write time, not by this schema, per the cross-artifact-linkage 'optional-in-schema, required-on-write' decision). The sibling noise_bank_run_record carries the same id (added there in 1.1 / v0.5.0); when both are present they MUST agree — egm-data checks that, since JSON Schema cannot compare across two files. Added 1.1."
     },
     "source": {
       "type": "string",
@@ -54,7 +58,7 @@
   "required": ["schema_version", "created_utc", "source", "fs_hz", "traces"],
   "additionalProperties": false,
   "x-hdf5-mapping": {
-    "root_attrs": ["schema_version", "created_utc", "source", "fs_hz"],
+    "root_attrs": ["schema_version", "created_utc", "bank_id", "source", "fs_hz"],
     "traces_group": "traces"
   }
 }

@@ -21,6 +21,7 @@ import h5py
 from myocard_egm_contracts.schema_info import current_version, get_schema, supported_versions
 from myocard_egm_contracts.validators import (
     validate_figure_spec,
+    validate_noise_bank,
     validate_observation,
     validate_phase_manifest,
     validate_synthetic_bank,
@@ -338,6 +339,43 @@ def test_synthetic_bank_with_malformed_bank_id_fails(valid_synthetic_bank: Path)
     with h5py.File(valid_synthetic_bank, "r+") as f:
         f.attrs["bank_id"] = "NOT-a-valid-id"
     result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("bank_id" in i or "does not match" in i for i in result.issues), result.issues
+
+
+def test_noise_bank_without_bank_id_still_validates(valid_noise_bank: Path) -> None:
+    """Same optional-in-schema / required-on-write treatment as the other banks:
+    a bank written before 1.1 has no id and must still validate."""
+    with h5py.File(valid_noise_bank, "r") as f:
+        assert "bank_id" not in f.attrs
+    result = validate_noise_bank(valid_noise_bank)
+    assert result.ok, result.issues
+
+
+def test_noise_bank_with_valid_bank_id_validates(valid_noise_bank: Path) -> None:
+    """The point of 1.1: egm-studio reads the id off the .h5 instead of the sidecar."""
+    with h5py.File(valid_noise_bank, "r+") as f:
+        f.attrs["bank_id"] = "nbank_iafdb_2026-06-15"
+    result = validate_noise_bank(valid_noise_bank)
+    assert result.ok, result.issues
+
+
+def test_noise_bank_with_malformed_bank_id_fails(valid_noise_bank: Path) -> None:
+    with h5py.File(valid_noise_bank, "r+") as f:
+        f.attrs["bank_id"] = "NOT-a-valid-id"
+    result = validate_noise_bank(valid_noise_bank)
+    assert not result
+    assert any("bank_id" in i or "does not match" in i for i in result.issues), result.issues
+
+
+def test_noise_bank_with_unknown_role_prefix_fails(valid_noise_bank: Path) -> None:
+    """B16 reaching a real field: a well-shaped id with an invented role prefix
+    used to validate here, and only became a problem downstream. The bank's role
+    is NOT checked against the prefix (an nbank_ vs tbank_ mismatch is egm-data's
+    content check) — this asserts only that the prefix is a known role at all."""
+    with h5py.File(valid_noise_bank, "r+") as f:
+        f.attrs["bank_id"] = "noisebank_iafdb_2026-06-15"
+    result = validate_noise_bank(valid_noise_bank)
     assert not result
     assert any("bank_id" in i or "does not match" in i for i in result.issues), result.issues
 
