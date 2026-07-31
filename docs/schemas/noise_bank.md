@@ -7,7 +7,7 @@ noise input by the synthetic-EGM mixer. One HDF5 file holding only what
 the mixer actually consumes: the signal waveform plus per-trace
 identifiers that get propagated onto each hybrid output trace.
 
-Schema version: `1.0`.
+Schema version: `1.1`.
 
 ## The two-file design
 
@@ -56,10 +56,21 @@ belongs in the producer, not the schema.
 Bank-level root attrs (HDF5):
 
 - `schema_version`, `created_utc`
+- `bank_id` *(optional, added 1.1)* — the bank's stable artifact id (e.g.
+  `nbank_iafdb_2026-06-15`). Optional in the schema so banks written before
+  1.1 still validate; egm-data stamps it on every new bank. The sidecar
+  carries the same id, and when both are present they must agree — a
+  cross-file check egm-data makes, since JSON Schema can't
 - `source` — free-form provenance tag for the upstream dataset (e.g.
   `"iafdb v1.0.0"`)
 - `fs_hz` — sampling rate; the mixer asserts this matches the
   synthetic side's fs
+
+Before 1.1 the id lived **only** on the sidecar, so a consumer that wanted
+to know which bank it had opened — egm-studio's noise view, the STU2
+analysis — had to find and parse the JSON first. Putting it on the `.h5`
+makes the bank self-identifying; the sidecar keeps its copy so the record
+is still meaningful on its own.
 
 Per-trace columns under `traces/`:
 

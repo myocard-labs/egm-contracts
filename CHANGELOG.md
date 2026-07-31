@@ -25,6 +25,11 @@ Phase-1.5 Wave 1 — the coordinated **v0.6.0** schema bump. Accumulating; ships
   required-on-write in activation mode: Wave-1 banks are written before the splitters populate
   it.
 
+- **`noise_bank` 1.1 — root `bank_id`** (B20). Optional in-schema, stamped on write by
+  egm-data. The id previously lived only on the sibling run record, so a consumer had to
+  find and parse the sidecar before it could tell which bank it had opened; the bank is now
+  self-identifying. Both copies stay, and egm-data checks they agree.
+
 ### Changed
 
 - **`ArtifactId` now validates the role prefix** — the pattern took any `[a-z]+_` prefix; it

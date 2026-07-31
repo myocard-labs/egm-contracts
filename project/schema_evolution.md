@@ -280,12 +280,26 @@ introduction version.
   (every window, no healthy threshold). (Backfilled change-log
   entry — the bump predated this log section.)
 
+### noise_bank
+
+- **1.1** — egm-contracts v0.6.0. Added the optional `bank_id`
+  stable-artifact identifier as a root attr (B20), bringing the noise bank
+  up to the cross-artifact-linkage baseline the other banks already carry.
+  **Reverses the v0.5.0 placement decision** recorded under
+  `noise_bank_run_record` 1.1 below: putting the id *only* on the sidecar
+  meant a consumer had to locate and parse the JSON before it could tell
+  which bank it had open (egm-studio's noise view, STU2). The sidecar keeps
+  its copy — both are optional-in-schema, and egm-data checks they agree
+  when both are present, since a cross-file equality check isn't
+  expressible in JSON Schema. Additive; older banks still validate.
+
 ### noise_bank_run_record
 
 - **1.1** — egm-contracts v0.5.0. Added the optional `bank_id`
   stable-artifact identifier for the noise bank (the design puts the
   noise bank's stable ID on this sidecar rather than the HDF5).
-  Cross-artifact linkage wave.
+  Cross-artifact linkage wave. *(Superseded by `noise_bank` 1.1 above,
+  v0.6.0 — the id now lives on both; this field stays.)*
 
 ### synthetic_bank
 

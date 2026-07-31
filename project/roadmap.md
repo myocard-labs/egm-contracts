@@ -101,6 +101,61 @@ itself, or delegate to openCARP's native format. Decide at Phase 7 kickoff.
 
 ## Backlog (unscheduled — promoted into a phase at a planning session)
 
+### Codegen emits unused `common` `$defs` into every generated module
+
+Every model file that `$ref`s `common.schema.json` also carries copies of common's
+*other* definitions. `_generated/python/noise_bank.py`, for instance, defines `FigureId`,
+`PaperId`, and `ActivationPosition` — none of which `noise_bank` uses. (`ArtifactId`
+itself is *not* copied: `--collapse-root-models` inlines it into the `bank_id` field as a
+pattern constraint. So what's duplicated is precisely the definitions the schema doesn't
+reference.)
+
+**Cause:** `codegen/gen_python.py` invokes datamodel-code-generator **once per schema
+file**. Each run resolves `common.schema.json` independently and emits every `$def` it
+finds there into that run's output module.
+
+**Fix (verified 2026-07-30):** run the generator **once over the schemas directory**
+instead of file-by-file. Confirmed in a scratch run — `noise_bank`'s module then contains
+only `SchemaVersion` / `Traces` / `NoiseBank`, with the shared definitions living once in
+the common module.
+
+**Why it isn't free.** Directory mode names its outputs `<schema>_schema.py`, so either the
+generator renames them afterwards or the package `__init__` aliases them; the public API
+re-exports each model module by name (`myocard_egm_contracts.noise_bank`), and consumers
+import through it, so the mapping has to be preserved or it's a breaking change for
+egm-data / egm-studio / egm-classifier. It also rewrites all eleven generated files at once.
+
+**Impact while it stands:** cosmetic plus one small footgun — the copies are *distinct
+Python types*, so `isinstance(x, noise_bank.ActivationPosition)` is False for a
+`common.ActivationPosition`. The public API exports the canonical ones, so normal use is
+unaffected.
+
+> Deliberately **not** fixed during the Phase-1.5 v0.6.0 bump (Daniel, 2026-07-30) — an
+> all-files codegen churn in the middle of a coordinated schema migration would obscure the
+> schema diff it's meant to verify. Schedule when no bump is in flight.
+
+### Noise bank ↔ run record: how should the two files reference each other?
+
+`bank_id` now exists in **both** `noise_bank` (1.1, v0.6.0) and its sibling
+`noise_bank_run_record` (1.1, v0.5.0), with neither authoritative and the equality check
+pushed to egm-data because JSON Schema can't compare across files. That's a duplicated
+identity with a hand-maintained invariant — it works, but it wasn't designed, it accumulated.
+
+The question isn't only `bank_id`: it's what the pairing *is*. Today it's convention only —
+matching name stems in one directory, no field on either side pointing at the other, nothing
+that detects a bank paired with the wrong record, or a record whose bank was regenerated.
+Options worth weighing: keep the duplication and formalise the check; make the bank
+authoritative and have the record reference it (a pointer, mirroring the `run_record_path`
+direction `iafdb_bank` 1.3 takes); or make the record authoritative and drop the bank's copy.
+Each pushes work to a different place — producer, reader, or validator.
+
+Needs a short investigation rather than a quick edit, and it reaches **egm-data** (writes
+both, would own any check) and **iafdb-pipeline** (the producer), so it isn't a
+contracts-only decision.
+
+> Raised during S3 review (Daniel, 2026-07-30): worth doing, **not** in Phase 1.5 — planning
+> has already cost more than budgeted. Flagged to the project-lead for the platform backlog.
+
 ### Reevaluate the stable-ID scheme — which artifacts get which pattern
 
 Today's split is three patterns: `ArtifactId` covers banks / runs / models / observations, while

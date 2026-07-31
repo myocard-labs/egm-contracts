@@ -2,7 +2,7 @@
 
 **Repo:** egm-contracts · **Phase:** 1.5
 **Phase design doc:** `intracardiac-platform/phases/phase_1_5/design.md`
-**Status:** in progress · **Progress:** 2/13 steps done (S1 · S2)
+**Status:** in progress · **Progress:** 3/13 steps done (S1 · S2 · S3)
 **Repo estimate:** **14–29.5 h** active (Cx **15** points) — the project-lead reads this into design §6;
 this chat does not edit the design doc.
 
@@ -130,7 +130,7 @@ Every step ends green: `ruff format src tests` → `ruff check src tests` → `m
   existing fixture id still validates); codegen drift check clean; `tests/test_roles.py` still green.
 - **Depends on:** S1.
 
-### S3 — `noise_bank` 1.1 — `bank_id` (B20 / P5) ☐ (1–2 h)
+### S3 — `noise_bank` 1.1 — `bank_id` (B20 / P5) ✅ (1–2 h)
 - **Change:** add optional root `bank_id` (`$ref common.schema.json#/$defs/ArtifactId`) +
   `x-hdf5-mapping.root_attrs`; `schema_version` enum → `["1.1"]`; regen; `schema_evolution.md`
   `noise_bank` change-log entry.
@@ -361,6 +361,14 @@ restructure really did dwarf the XS additive ones. Worth a look when the method 
   `simulation_id`, egm-data adds a writer check. (4) **P3's egm-data half is already shipped**, so P3 is
   the B16 validator here + a content check there. (5) **Effort rule (§5b):** planning sessions count
   toward issue Actuals — **superseded same day, see below.**
+- **2026-07-30** — *S3 review (Daniel) → two backlog items, neither fixed in 1.5.* (1) **Codegen
+  emits unused `common` `$defs`** into every model module (`noise_bank.py` carries `FigureId` /
+  `PaperId` / `ActivationPosition`). Cause: one generator run per schema file, each re-emitting
+  common's defs. Verified fix = one run over the schemas directory; deferred because it rewrites all
+  eleven generated files mid-bump and would rename the modules the public API re-exports. (2)
+  **noise bank ↔ run record pairing** — `bank_id` now sits in both files with neither authoritative;
+  needs a design pass, not another field. Both in `roadmap.md`; (2) raised as **CL-086** since it
+  spans egm-data + iafdb-pipeline.
 - **2026-07-29** — *CL-062 folded in (from CL-060):* `synthetic_bank` 2.0 `traces/` gains the same
   optional per-trace **`activation_position`** — absent in Wave 1, populated by SEP2 in Wave 2 (S9).
   **Repo-internal call while doing it:** the field is now defined **once** as
