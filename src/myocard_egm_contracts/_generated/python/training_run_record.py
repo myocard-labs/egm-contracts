@@ -14,7 +14,7 @@ class SchemaVersion(Enum):
     Versioned schema identifier in <package>.<format>/<major>.<minor> form. Consumers MUST refuse unknown major versions.
     """
 
-    field_1_1 = "1.1"
+    field_1_2 = "1.2"
 
 
 class FigureId(RootModel[str]):
@@ -28,6 +28,13 @@ class PaperId(RootModel[str]):
     root: str = Field(..., pattern="^paper_[a-z0-9_]+$")
     """
     Paper identifier (e.g. paper_phase_1_5_realism). Slug-based, no date.
+    """
+
+
+class ActivationPosition(RootModel[float]):
+    root: float = Field(..., ge=0.0, le=1.0)
+    """
+    Realized position of the activation within a trace, as a fraction of the trace: 0.0 = first sample, 1.0 = last sample. Rate- and length-independent by construction; convert at point of use with idx = round(frac * (T - 1)). This is the position the activation-aware splitter/crop ACTUALLY produced (the anchor it placed), not a value measured from the waveform afterwards - a consumer that wants the measured dV/dt-max position computes it with egm-features instead. Stored per trace by both corpora (iafdb_bank via IAF1, synthetic_bank via SEP2) so the synthetic-vs-IAFDB position distributions are compared stored-vs-stored rather than one stored against one recomputed. Defined once here and $ref'd by both banks so the two cannot drift. OPTIONAL-IN-SCHEMA / REQUIRED-ON-WRITE in activation mode, and PERMANENTLY so - the field is meaningful only for single-activation traces. It is absent whenever no single anchor exists: sliding-window extraction (no activation anchor at all), multi-beat traces (several activations, so no one position describes the trace), and any bank written before its producer's splitter shipped. Consumers MUST treat absence as 'unknown position' - never as 0.0, which is a legitimate value meaning the activation sits on the first sample, so defaulting would fabricate a spike at the low edge of the distribution.
     """
 
 
@@ -85,7 +92,7 @@ class ReliabilityBin(BaseModel):
 
 class HeldOutTest(BaseModel):
     """
-    Held-out test metrics block (loss + scalar metrics + reliability bins). Present in a TrainingRunRecord iff a test split was evaluated at the end of training.
+    Held-out test metrics block (loss + scalar metrics + reliability bins). Present in a TrainingRunRecord iff a test split was evaluated. PRODUCER SEMANTIC (1.2): the metrics are computed with the BEST epoch's weights — the epoch named in `best`, by the configured selection metric — not the last epoch's. Reporting the last epoch would describe a model nobody ships, since the exported model is the selected one. 1.2 also brought this block to parity with the per-epoch validation bundle (`metrics` mirrors `val_metrics`, `reliability` mirrors `val_reliability`) so consumers render train / val / test through one code path.
     """
 
     model_config = ConfigDict(
@@ -93,15 +100,15 @@ class HeldOutTest(BaseModel):
     )
     loss: float | None = None
     """
-    Mean test-set loss across batches. Null when the test split was empty.
+    Mean test-set loss across batches. Null when the test split was empty. Mirrors EpochRecord.val_loss.
     """
-    metrics: dict[str, float | int | None] | None = None
+    metrics: dict[str, Any] | None = None
     """
-    Scalar test metrics (auroc, accuracy, precision, recall, f1, ece, ...). Keys are metric names; values are scalars or null when the metric was undefined.
+    Scalar test metrics for the epoch selected in `best` (auroc / accuracy / precision / recall / f1 / ece). Confusion-matrix counts may appear under a nested 'confusion' object with keys tp/fp/tn/fn. Additional producer-defined keys allowed. Mirrors EpochRecord.val_metrics exactly — before 1.2 this admitted only flat scalars, so a producer writing the same bundle it writes per-epoch (which carries a nested `confusion`) had its test block rejected while its epochs passed. That asymmetry is what B18 removes.
     """
     reliability: list[ReliabilityBin] | None = None
     """
-    Reliability bins computed on the test split (calibration-diagram input).
+    Reliability bins computed on the test split (calibration-diagram input). Mirrors EpochRecord.val_reliability.
     """
 
 
@@ -133,6 +140,10 @@ class EpochRecord(BaseModel):
     """
     Wall-clock seconds spent on this epoch (training + validation).
     """
+    train_metrics: dict[str, Any] | None = None
+    """
+    Scalar TRAINING-split metrics for the epoch, mirroring val_metrics key-for-key (auroc / accuracy / precision / recall / f1 / ece, optional nested 'confusion' with tp/fp/tn/fn). Added 1.2 so train-vs-val divergence is visible in the record itself — with validation metrics alone, an overfitting run and a genuinely-hard-task run look identical. OPTIONAL-IN-SCHEMA / REQUIRED-ON-WRITE: deliberately NOT in `required`, because the Wave-1 schema migration writes records before the emitting code exists (CLF5 adopts the schema, CLF2 adds the emit). Making it required here would drag that feature work into the migration wave and defeat the migration/feature split. Once CLF2 ships, the producer enforces presence. Reliability bins for the train split are out of scope (see feature_backlog FB-10).
+    """
     val_metrics: dict[str, Any]
     """
     Scalar validation metrics for the epoch (auroc / accuracy / precision / recall / f1 / ece). Confusion-matrix counts may appear under a nested 'confusion' object with keys tp/fp/tn/fn. Additional producer-defined keys allowed.
@@ -145,7 +156,7 @@ class EpochRecord(BaseModel):
 
 class TrainingRunRecord(BaseModel):
     """
-    Versioned full-fidelity record of one ML training run, written to run.json. Schema version 1.1. Captures run-level metadata, the resolved training configuration, per-epoch records (each with its reliability bins), the best epoch by the configured selection metric, and an optional held-out test block. All non-finite floats are emitted as null so the JSON stays strictly valid. Renamed from 'run_record' at egm-contracts v0.3.0 to leave naming room for future per-activity run records (e.g. inference_run_record, hybrid_eval_run_record); the convention matches noise_bank_run_record (extraction-side). 1.1 (from 1.0) added the optional stable-artifact pointer fields `run_id` / `trained_on_bank_id` / `produced_model_id` (egm-contracts v0.5.0, cross-artifact linkage).
+    Versioned full-fidelity record of one ML training run, written to run.json. Schema version 1.2. Captures run-level metadata, the resolved training configuration, per-epoch records (each with its reliability bins), the best epoch by the configured selection metric, and an optional held-out test block. All non-finite floats are emitted as null so the JSON stays strictly valid. Renamed from 'run_record' at egm-contracts v0.3.0 to leave naming room for future per-activity run records (e.g. inference_run_record, hybrid_eval_run_record); the convention matches noise_bank_run_record (extraction-side). 1.1 (from 1.0) added the optional stable-artifact pointer fields `run_id` / `trained_on_bank_id` / `produced_model_id` (egm-contracts v0.5.0, cross-artifact linkage). 1.2 (from 1.1) added the optional per-epoch `train_metrics` bundle and brought `HeldOutTest` to parity with the validation bundle (egm-contracts v0.6.0, Phase 1.5); it also dropped `host` from the documented well-known `run` keys and made config artifact paths repo-relative — both conventions, with no structural expression.
     """
 
     model_config = ConfigDict(
@@ -157,30 +168,33 @@ class TrainingRunRecord(BaseModel):
     """
     created_utc: AwareDatetime
     run_id: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Stable artifact ID of THIS training run, e.g. 'run_v1_5_courtemanche_2026-06-25'. The run's own cross-artifact identifier — distinct from the free-form 'run_id' well-known key inside the `run` object below (producers SHOULD make the two equal when both are set). Optional for legacy records written before egm-contracts v0.5.0; egm-classifier stamps it at train time. Added 1.1.
     """
     trained_on_bank_id: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Stable artifact ID of the training bank this run consumed, e.g. 'tbank_synthetic_courtemanche_v1_5_2026-06-25'. Relationship pointer (run -> bank; future graph edge TRAINED_ON). Optional; stamped at train time. Added 1.1.
     """
     produced_model_id: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Stable artifact ID of the model this run produced, e.g. 'model_egm_classifier_v1_5_2026-06-25'. Relationship pointer (run -> model; future graph edge PRODUCED). Optional; stamped at export time. Added 1.1.
     """
     run: dict[str, Any]
     """
-    Run-level metadata. Well-known keys (producer SHOULD write all of these): 'git_sha' (string, repo state at training time), 'host' (string, hostname where training ran), 'model_version' (string, model architecture version tag), 'training_started_utc' / 'training_ended_utc' (ISO date-times). Additional keys allowed for forward compatibility. The run's stable cross-artifact id lives in the top-level `run_id` field, not here.
+    Run-level metadata. Well-known keys (producer SHOULD write all of these): 'git_sha' (string, repo state at training time), 'model_version' (string, model architecture version tag), 'training_started_utc' / 'training_ended_utc' (ISO date-times). Additional keys allowed for forward compatibility. The run's stable cross-artifact id lives in the top-level `run_id` field, not here. NOTE (1.2): 'host' was dropped from the well-known keys — producers SHOULD NOT write the training machine's hostname. It never answered a question anyone asked of a run record, and it is the one field here that identifies a person's machine rather than the experiment. The object stays additionalProperties:true, so a legacy record carrying it still validates; readers simply ignore it.
     """
     config: dict[str, Any]
     """
-    The fully-resolved training configuration as a flat-ish nested dict. Well-known top-level keys: 'model' (architecture + hyperparameters), 'data' (augmentation, split ratios), 'training' (optimizer, scheduler, epochs, batch size, loss), 'eval' (selection metric, decision threshold). The training bank's stable id lives in the top-level `trained_on_bank_id` field, not in config.data. The contents reflect whatever the producer's config system serializes; consumers should treat unknown keys as additional context rather than fail on them.
+    The fully-resolved training configuration as a flat-ish nested dict. Well-known top-level keys: 'model' (architecture + hyperparameters), 'data' (augmentation, split ratios), 'training' (optimizer, scheduler, epochs, batch size, loss), 'eval' (selection metric, decision threshold). The training bank's stable id lives in the top-level `trained_on_bank_id` field, not in config.data. The contents reflect whatever the producer's config system serializes; consumers should treat unknown keys as additional context rather than fail on them. CONVENTION (1.2): artifact paths recorded in here (bank path, output directory, checkpoint dir) SHOULD be repo-relative, not absolute. An absolute path pins the record to the machine that produced it, so a run record moved between machines — or read back after a directory rename — points at nothing. Not structurally enforced: these live under producer-defined keys, so it is the producer's job.
     """
     epochs: list[EpochRecord]
     """

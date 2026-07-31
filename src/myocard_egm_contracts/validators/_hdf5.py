@@ -85,6 +85,39 @@ def read_root_attrs(
     return out
 
 
+def read_json_columns(
+    columns: dict[str, list[Any]],
+    *,
+    suffix: str = "_json",
+) -> dict[str, list[Any]]:
+    """Decode per-row JSON-string columns, stripping the ``_json`` suffix.
+
+    The synthetic bank's ``simulations/`` group stores one typed object per
+    simulation as a JSON string — ``geometry_json``, ``activation_json``, and
+    so on — because HDF5 has no nested-record type worth using here and the
+    objects are polymorphic. The schema describes the *decoded* form under the
+    unsuffixed name, so this bridges the two.
+
+    A row that fails to parse is left as its raw string rather than raising:
+    the validator then reports "expected object, got string" against the
+    offending column, which points at the problem far better than a
+    JSONDecodeError raised from inside the reader.
+    """
+    out: dict[str, list[Any]] = {}
+    for name, values in columns.items():
+        if not name.endswith(suffix):
+            out[name] = values
+            continue
+        decoded: list[Any] = []
+        for value in values:
+            try:
+                decoded.append(json.loads(value) if isinstance(value, str) else value)
+            except json.JSONDecodeError:
+                decoded.append(value)
+        out[name[: -len(suffix)]] = decoded
+    return out
+
+
 def read_group_columns(f: h5py.File, group: str = "traces") -> dict[str, list[Any]]:
     """Read every dataset in ``group`` into a dict of Python lists.
 

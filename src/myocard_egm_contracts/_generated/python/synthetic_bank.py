@@ -4,82 +4,25 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, RootModel
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, RootModel, constr
 
 
 class SchemaVersion(Enum):
     """
-    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions.
+    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions — and a 1.x bank must be refused rather than partially read, since 2.0 moved fields rather than adding them.
     """
 
-    field_1_1 = "1.1"
+    field_2_0 = "2.0"
 
 
-class StimEdgeEnum(Enum):
-    top = "top"
-    bottom = "bottom"
-    left = "left"
-    right = "right"
+class PairIndexItem(RootModel[int]):
+    root: int = Field(..., ge=0)
 
 
-class Traces(BaseModel):
-    """
-    Per-trace columns. Maps to the HDF5 `traces/` group. All columns have first dimension N (the trace count) and are aligned.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    signal: list[list[float]]
-    """
-    (N, T) float32 — the bipolar EGM waveforms.
-    """
-    simulation_id: list[int]
-    """
-    (N,) int64 — patient/simulation index (the patient-aware split unit).
-    """
-    pair_index: list[int]
-    """
-    (N,) int64 — index of the bipolar electrode pair within the grid (0..n_pairs).
-    """
-    electrode_row: list[int]
-    """
-    (N,) int64 — row index within the 5x5 grid this pair belongs to.
-    """
-    fibrosis_density: list[float]
-    """
-    (N,) float64 — requested fibrosis density (continuous label, 0.0 == healthy).
-    """
-    fibrosis_density_realized: list[float]
-    """
-    (N,) float64 — actual fraction of non-conductive nodes after the substrate draw (differs from requested due to grid-size discretization).
-    """
-    electrode_height_mm: list[float]
-    """
-    (N,) float64 — height of this electrode pair above the tissue surface, in mm. Sampled uniformly per simulation from [0.2, 1.0] mm in Phase 1.
-    """
-    seed: list[int]
-    """
-    (N,) int64 — RNG seed used for this simulation (reproducibility).
-    """
-    snr_db: list[float]
-    """
-    (N,) float64 — target signal-to-noise ratio at which IAFDB noise was mixed in. NaN when mixer was off.
-    """
-    stim_edge: list[StimEdgeEnum]
-    """
-    (N,) UTF-8 — stimulation edge for the planar wave that produced this trace. Phase 1 only models planar-wave stim from a tissue edge; Phase 2 introduces point-source / S1-S2 protocols that will need a richer 'stimulation' object (type discriminator + protocol-specific params). When that schema version lands, this field is replaced (not extended); see project/known_issues.md for the migration plan.
-    """
-    noise_record: list[str]
-    """
-    (N,) UTF-8 — IAFDB record name that supplied the noise segment ('' when mixer was off).
-    """
-    noise_channel: list[str]
-    """
-    (N,) UTF-8 — IAFDB channel name that supplied the noise segment ('' when mixer was off).
-    """
+class LabelItem(RootModel[int]):
+    root: int = Field(..., ge=0)
 
 
 class FigureId(RootModel[str]):
@@ -96,9 +39,563 @@ class PaperId(RootModel[str]):
     """
 
 
+class ActivationPosition(RootModel[float]):
+    root: float = Field(..., ge=0.0, le=1.0)
+    """
+    Realized position of the activation within a trace, as a fraction of the trace: 0.0 = first sample, 1.0 = last sample. Rate- and length-independent by construction; convert at point of use with idx = round(frac * (T - 1)). This is the position the activation-aware splitter/crop ACTUALLY produced (the anchor it placed), not a value measured from the waveform afterwards - a consumer that wants the measured dV/dt-max position computes it with egm-features instead. Stored per trace by both corpora (iafdb_bank via IAF1, synthetic_bank via SEP2) so the synthetic-vs-IAFDB position distributions are compared stored-vs-stored rather than one stored against one recomputed. Defined once here and $ref'd by both banks so the two cannot drift. OPTIONAL-IN-SCHEMA / REQUIRED-ON-WRITE in activation mode, and PERMANENTLY so - the field is meaningful only for single-activation traces. It is absent whenever no single anchor exists: sliding-window extraction (no activation anchor at all), multi-beat traces (several activations, so no one position describes the trace), and any bank written before its producer's splitter shipped. Consumers MUST treat absence as 'unknown position' - never as 0.0, which is a legitimate value meaning the activation sits on the first sample, so defaulting would fabricate a spike at the low edge of the distribution.
+    """
+
+
+class Transform(Enum):
+    """
+    The space the sweep and any surrogate model work in. 'log' suits a strictly-positive scale knob whose effect is multiplicative (a diffusion coefficient); 'logit' suits a knob bounded to (0,1) such as a fibrosis density, keeping samples off the boundary; 'identity' is the default for an unbounded or already-linear knob. Recorded rather than inferred because the same bounds sampled in different spaces give different designs, and a result is only reproducible if the space is known.
+    """
+
+    identity = "identity"
+    log = "log"
+    logit = "logit"
+
+
+class Role(Enum):
+    """
+    What this knob means to the science. 'label_param' — it determines the trace's label (fibrosis density under a density policy), so it is the thing the classifier is meant to detect. 'nuisance' — it changes the signal without changing the label (electrode height, conduction velocity, SNR), so it is a realism knob the estimator calibrates and the classifier should ideally be invariant to. The distinction matters when interpreting a feature-vs-theta relationship: a feature tracking a label_param is signal, the same feature tracking a nuisance knob is a confound.
+    """
+
+    label_param = "label_param"
+    nuisance = "nuisance"
+
+
+class TunedParam(BaseModel):
+    """
+    One knob being swept or calibrated in a parameter study. A TunedParam does not HOLD a value — it points at one that already lives in a simulation's per-function config (simulation_config), and says how that knob is being explored across the run. That indirection is the whole design: the per-simulation objects stay the single source of truth for what each simulation was, and theta is a bank-level selection over them, so adding or removing a knob is one list entry and zero schema churn.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    path: str = Field(..., min_length=1)
+    """
+    Dotted pointer into the per-simulation config identifying the knob, e.g. 'substrate.density', 'cell_model.params.g_CaL_scale', 'electrodes.height_mm'. Also serves as the axis label in a feature-vs-theta plot. DELIBERATELY UNCONSTRAINED: no pattern, no enum, no grammar — resolving a path against a config is a resolver's job, and both the resolver and a formal path grammar are deferred out of v0.6.0 (CL-024). Constraining this later is additive; guessing the grammar now, before anything resolves one, would bake in a shape nothing has tested.
+    """
+    bounds: list[float] = Field(..., max_length=2, min_length=2)
+    """
+    [lo, hi] — the sweep range, and the emulator's input domain for this knob. Ascending by convention; JSON Schema cannot compare two items of one array, so lo <= hi is the producer's to enforce. Expressed in the knob's own units, NOT in transformed space: a log-transformed knob still records its natural-unit range here, so a reader doesn't have to know the transform to know what was swept.
+    """
+    transform: Transform | None = None
+    """
+    The space the sweep and any surrogate model work in. 'log' suits a strictly-positive scale knob whose effect is multiplicative (a diffusion coefficient); 'logit' suits a knob bounded to (0,1) such as a fibrosis density, keeping samples off the boundary; 'identity' is the default for an unbounded or already-linear knob. Recorded rather than inferred because the same bounds sampled in different spaces give different designs, and a result is only reproducible if the space is known.
+    """
+    role: Role | None = None
+    """
+    What this knob means to the science. 'label_param' — it determines the trace's label (fibrosis density under a density policy), so it is the thing the classifier is meant to detect. 'nuisance' — it changes the signal without changing the label (electrode height, conduction velocity, SNR), so it is a realism knob the estimator calibrates and the classifier should ideally be invariant to. The distinction matters when interpreting a feature-vs-theta relationship: a feature tracking a label_param is signal, the same feature tracking a nuisance knob is a confound.
+    """
+    nominal: float | None = None
+    """
+    The value this knob is pinned to when it is NOT part of the active sweep. Recorded so a one-at-a-time screening design is self-describing: without it, a bank tells you which knob varied but not what the others were held at, and the two screenings are then not comparable.
+    """
+
+
+class Patch2DGeometry(BaseModel):
+    """
+    A 2D square tissue patch with uniform fiber orientation. Mirrors specs.Patch2DGeometry.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["patch_2d"]
+    size_mm: float = Field(..., gt=0.0)
+    """
+    Physical edge length of the square patch in mm. Phase 1 = 40.
+    """
+    dr_mm: float = Field(..., gt=0.0)
+    """
+    Spatial discretization step in mm; mesh size per edge is round(size_mm / dr_mm). Phase 1 = 0.25.
+    """
+    fiber_angle_rad: float | None = None
+    """
+    Fiber orientation in radians (0 = along +x, pi/2 = along +y).
+    """
+    anisotropy_ratio: float | None = Field(None, ge=1.0)
+    """
+    Conduction-velocity ratio CV_along / CV_across; 1 = isotropic. Prescriptive — the backend configures its diffusion tensor so the realized ratio matches (CV scales with sqrt(D), so D_along / D_across = anisotropy_ratio^2).
+    """
+
+
+class CourtemancheCellModel(BaseModel):
+    """
+    Courtemanche-Ramirez-Nattel human atrial ionic model. Time is already physical (ms), so no model-time calibration constant is needed — unlike Aliev-Panfilov.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["courtemanche"]
+    params: dict[str, float] | None = None
+    """
+    Model parameter overrides applied on top of the backend's defaults, as {name: value} — typically ionic conductance scalings (e.g. g_CaL_scale, g_K1_scale). Deliberately open: which conductances are worth varying is an experimental question the phase's screening answers, and pinning a fixed key set here would force a schema bump every time that answer changes. The bank-scoped theta-spec (generation_params.schema.json) points INTO this object by path when a knob is being swept.
+    """
+
+
+class AlievPanfilovCellModel(BaseModel):
+    """
+    Aliev-Panfilov phenomenological model — the Phase-1 baseline, kept so v1 banks stay describable and the A/B against Courtemanche is expressible.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["aliev_panfilov"]
+    ap_time_unit_ms: float = Field(..., gt=0.0)
+    """
+    Calibration constant mapping one model time unit to physical milliseconds. Aliev-Panfilov is non-dimensional in time, so every duration in the run is expressed through this constant; it is meaningless for ionic models, which is exactly why it lives on this variant rather than on the backend.
+    """
+    params: dict[str, float] | None = None
+    """
+    Model parameter overrides ({name: value}) on top of the backend's defaults.
+    """
+
+
+class UniformRandomFibrosis(BaseModel):
+    """
+    I.i.d. nodal fibrosis: each interior mesh node is marked non-conductive with probability `density`. Matches Nezlobinsky 2021 / Okenov 2024. Mirrors specs.UniformRandomFibrosis.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["uniform_random_fibrosis"]
+    density: float = Field(..., ge=0.0, lt=1.0)
+    """
+    Target fibrotic-node fraction. 0.0 is exactly healthy; propagation tends to fail above ~0.6 (Nezlobinsky 2021), and Phase 1 sampled [0, 0.5]. The bound is the physical one (a fraction), not the useful one — the useful range is a producer-side sampling decision, not a contract.
+    """
+
+
+class SubstrateSummary(BaseModel):
+    """
+    What the substrate draw actually realized, as opposed to what was requested. Separated from the Substrate object because a realized quantity is an OUTPUT of generation: the realized density differs from the requested one through grid discretization, and a variant with no scalar density at all (patchy, compact) still reports something here. Open key set — each substrate variant summarizes itself. WATCH (2026-07-30): this is one flat object shared by every substrate type, which holds while uniform-random is the only one. Once interstitial / patchy / compact land, their meaningful summaries diverge — cluster-size distribution, strand length, patch count — and a shared bag of optional keys stops describing any of them well. At that point this likely becomes a discriminated union keyed to the substrate variant, the same shape Substrate already has. Deliberately not done now: with one variant, a union of one is structure without information.
+    """
+
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    realized_density: float | None = Field(None, ge=0.0, le=1.0)
+    """
+    Fraction of mesh nodes actually marked non-conductive after the draw.
+    """
+    n_fibrotic_nodes: int | None = Field(None, ge=0)
+    """
+    Count of non-conductive nodes in the realized mask.
+    """
+
+
+class ElectrodeIndice(RootModel[int]):
+    root: int = Field(..., ge=0)
+
+
+class FinitewaveBackend(BaseModel):
+    """
+    The Finitewave finite-difference solver.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["finitewave"]
+    version: str | None = None
+    """
+    Finitewave version string that produced the simulation.
+    """
+    output_fs_hz: float = Field(..., gt=0.0)
+    """
+    On-disk sample rate after downsampling. Phase 1 = 1000 to match IAFDB; synthetic and real must share a rate for lag-based features to be comparable.
+    """
+    capture_oversample: int | None = Field(None, ge=1)
+    """
+    The backend captures at capture_oversample * output_fs_hz and the runner downsamples. Recorded because it determines whether the on-disk trace is anti-aliased by oversampling margin rather than by a filter.
+    """
+    dt_model_units: float | None = Field(None, gt=0.0)
+    """
+    Solver time step in the model's time units.
+    """
+    params: dict[str, Any] | None = None
+    """
+    Additional backend knobs ({name: value}), e.g. diffusion. Open for the same reason the cell-model params are: which solver knobs get swept is an experimental question, and the theta-spec points into this object by path.
+    """
+
+
+class Threshold(RootModel[float]):
+    root: float = Field(..., ge=0.0, le=1.0)
+
+
+class GlobalDensityLabel(BaseModel):
+    """
+    Labels every trace in the simulation by the WHOLE patch's realized fibrosis density against a threshold. Mirrors label_policy.GlobalDensityLabel. Note the implication, which is a known limitation rather than a bug: every trace in a simulation gets the same label regardless of where its electrode pair sat. Class names are NOT carried here — LabelNames owns them, so a bank states each class's meaning exactly once.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["global_density"]
+    thresholds: list[Threshold] = Field(..., min_length=1)
+    """
+    Ascending realized whole-patch density cut points. N thresholds produce N+1 classes, so a binary healthy/fibrotic policy is a single-element array and a Phase-2 severity policy is several — no new variant, no contracts bump. Class k is the band between thresholds[k-1] and thresholds[k]; class names live in LabelNames, which already maps any number of labels and is the single place a class is named.
+    """
+
+
+class LocalDensityLabel(BaseModel):
+    """
+    Labels each trace by the realized fibrosis density within a radius of its own pair midpoint — so traces from one simulation can disagree, which is the point. Mirrors label_policy.LocalDensityLabel. Class names are NOT carried here — LabelNames owns them, so a bank states each class's meaning exactly once.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["local_density"]
+    radius_mm: float = Field(..., gt=0.0)
+    """
+    Radius around the pair midpoint over which density is measured. Sets what 'local' means, and is worth recording because a result only reproduces at the same radius.
+    """
+    thresholds: list[Threshold] = Field(..., min_length=1)
+    """
+    Ascending local density cut points. N thresholds produce N+1 classes, so a binary healthy/fibrotic policy is a single-element array and a Phase-2 severity policy is several — no new variant, no contracts bump. Class k is the band between thresholds[k-1] and thresholds[k]; class names live in LabelNames, which already maps any number of labels and is the single place a class is named.
+    """
+
+
+class Edge(Enum):
+    """
+    A mesh edge, in the backend's naming convention: top = smallest axis-0 index, bottom = largest axis-0, left = smallest axis-1, right = largest axis-1. Electrode coordinates use the same axis convention. Defined once and $ref'd by every variant that names an edge, so a single-shot stimulus and a paced protocol cannot end up disagreeing about what 'top' means.
+    """
+
+    top = "top"
+    bottom = "bottom"
+    left = "left"
+    right = "right"
+
+
+class PositionMm(RootModel[list[float]]):
+    """
+    A coordinate in millimetres, in the geometry's frame. Length follows the active Geometry variant: [x, y] on a 2D patch, [x, y, z] on a 3D mesh. Defined once so stimulus sites, electrode positions and pair midpoints stay dimensionally consistent with each other.
+    """
+
+    root: list[float] = Field(..., max_length=3, min_length=2, title="PositionMm")
+    """
+    A coordinate in millimetres, in the geometry's frame. Length follows the active Geometry variant: [x, y] on a 2D patch, [x, y, z] on a 3D mesh. Defined once so stimulus sites, electrode positions and pair midpoints stay dimensionally consistent with each other.
+    """
+
+
+class Traces(BaseModel):
+    """
+    Per-trace columns — one row per bipolar electrode pair per simulation. Maps to the HDF5 `traces/` group. All columns have first dimension N and are aligned. After the 2.0 restructure a trace carries only its identity, its signal, its label, and its own noise provenance: everything describing HOW it was generated is reached through `simulation_id`, and everything about WHERE its electrodes sat is reached through `pair_index`.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    signal: list[list[float]]
+    """
+    (N, T) float32 — the bipolar EGM waveforms.
+    """
+    simulation_id: list[int]
+    """
+    (N,) int64 — foreign key into `simulations/simulation_id`. Also the patient-aware split unit: traces from one simulation share a substrate, so splitting across them would leak. Every value MUST appear in the simulations group — an orphan is a bank whose provenance cannot be resolved, and egm-data checks it since JSON Schema cannot express a cross-group reference.
+    """
+    pair_index: list[PairIndexItem]
+    """
+    (N,) int64 — foreign key into this simulation's `electrodes.pairs` list, identifying which bipolar pair produced the trace. Resolves to the pair's row, height and midpoint, which 1.1 repeated per trace.
+    """
+    label: list[LabelItem]
+    """
+    (N,) int64 — the trace's class label. A plain integer by design: the polymorphism lives entirely in the producer-side policy, so the classifier's input contract is an int today, at multiclass severity, and under any future label family. Its meaning comes from the simulation's `label_names`. Replaces 1.1's `fibrosis_density` / `fibrosis_density_realized` float columns, which conflated the label with the parameter that produced it.
+    """
+    activation_position: list[ActivationPosition] | None = None
+    """
+    (N,) float32 — realized activation position within the trace as a [0,1] fraction, written by the controlled-position crop. OPTIONAL, permanently: absent when no controlled crop was applied (which is every bank the Phase-1.5 Wave-1 migration writes — SEP2 populates it in Wave 2) and absent for multi-beat traces, where no single position describes the trace. Shares its definition with iafdb_bank's identical column so the synthetic and real position distributions are compared stored-vs-stored. Absence means 'unknown', never 0.0.
+    """
+    snr_db: list[float]
+    """
+    (N,) float64 — target signal-to-noise ratio at which noise was mixed into this trace. NaN when the mixer was off. Per trace rather than per simulation because the mixer draws an SNR per trace.
+    """
+    noise_record: list[str]
+    """
+    (N,) UTF-8 — source record that supplied this trace's noise segment ('' when the mixer was off).
+    """
+    noise_channel: list[str]
+    """
+    (N,) UTF-8 — source channel that supplied this trace's noise segment ('' when the mixer was off).
+    """
+
+
+class GenerationParams(BaseModel):
+    """
+    The theta-spec: which knobs a bank's sweep varied, and within which structural regime. BANK / SWEEP-SCOPED — one per bank, stored as the `generation_params_json` root attr of a synthetic_bank, NOT per simulation. That scope distinction is the reason this lives in its own schema rather than beside the per-simulation objects in simulation_config: those describe what ONE simulation was, this describes what a whole multi-simulation run explored. Two halves: `regime` fixes the structural choices (which cell model, which substrate type), and `knobs` lists the continuous parameters explored WITHIN that structure. The split matters because a recovered parameter region is only meaningful inside its regime — 'the realistic conduction velocity is X' is a claim about Courtemanche-on-uniform-random-fibrosis, not about atrial tissue in general. A new regime is a new theta-space by design, not a wider one. Membership of `knobs` is set per sweep by the phase's identifiability screening, which is exactly why it is a list rather than a fixed field set: which knobs are worth calibrating is an experimental result, and it will change.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    regime: dict[str, str]
+    """
+    The structural discriminators held fixed across the sweep, as {function: type}, e.g. {'cell_model': 'courtemanche', 'substrate': 'uniform_random_fibrosis', 'geometry': 'patch_2d'}. Keys are the generation functions (geometry / cell_model / substrate / activation / electrodes / backend / label_policy); values are the `type` discriminators of the variants used. Open rather than a closed key set: a future strategy axis (noise selection, post-processing) becomes a regime key without a schema bump, and regime is descriptive metadata rather than a validated contract surface.
+    """
+    knobs: list[TunedParam]
+    """
+    The knobs varied in this sweep, in a stable order — an emulator's input vector is positional, so reordering this list silently reinterprets every stored design point. MAY BE EMPTY: a bank generated at one fixed parameter set has a regime but no swept knobs, which is exactly what the Phase-1.5 Wave-1 migration writes (SEP12 emits today's behavior, no sweep). An empty list is therefore a meaningful statement — 'nothing varied' — not a missing value.
+    """
+
+
+class Geometry(RootModel[Patch2DGeometry]):
+    root: Patch2DGeometry = Field(..., discriminator="type", title="Geometry")
+    """
+    The tissue domain. Phase 1.5 ships the 2D patch; 3D variants (atrial mesh, cylinder) extend this union without changing anything that references it. Positions elsewhere in the config are coordinate arrays whose length follows the active variant's dimensionality — nothing downstream hard-codes 2 or 3.
+    """
+
+
+class Substrate(RootModel[UniformRandomFibrosis]):
+    root: UniformRandomFibrosis = Field(..., discriminator="type", title="Substrate")
+    """
+    The fibrosis (or other substrate) pattern. Phase 1.5 ships uniform-random; interstitial / patchy / compact / heterogeneous-mix variants extend this union. Note what this object is NOT: it holds the REQUESTED pattern parameters, while what the draw actually produced is separate (see SubstrateSummary) — the two differ through grid discretization, and conflating them was one of the flaws in the flat-column layout.
+    """
+
+
+class PlanarEdgeActivation(BaseModel):
+    """
+    A thin strip of voltage applied at one or more mesh edges; the wave propagates inward. Mirrors specs.PlanarEdgeStimulus, with one deliberate difference: `edges` is a LIST where the producer's Phase-1 dataclass carries a single `edge`. Today's single-edge behavior is the one-element list, so the Wave-1 migration writes ['top'] and SEP6's multi-edge feature needs no schema change — the alternative (adding a field in Wave 2) would have put a contracts bump in the middle of the feature wave.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["planar_edge"]
+    edges: list[Edge] = Field(..., min_length=1)
+    """
+    Which edge(s) fire. One entry reproduces Phase-1 behavior; several give the propagation-direction variety that drives morphology diversity.
+    """
+    voltage: float | None = Field(None, gt=0.0)
+    """
+    Stimulus amplitude in the cell model's voltage units (not mV — the models are dimensionless or model-specific here).
+    """
+    time_model_units: float | None = None
+    """
+    When the stimulus fires, in the backend's model time units.
+    """
+    strip_thickness: int | None = Field(None, ge=1)
+    """
+    Strip thickness in mesh cells. A thicker strip is more reliable at triggering propagation on a fibrotic substrate.
+    """
+
+
+class PointActivation(BaseModel):
+    """
+    A point (or small ball) stimulus at a coordinate — the variant that flat `stim_edge` could not express at all. Gives curved wavefronts and off-axis propagation.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["point"]
+    position_mm: list[float] = Field(
+        ..., max_length=3, min_length=2, title="PositionMm"
+    )
+    """
+    Stimulus location in mm, in the geometry's coordinate frame. Length follows the active Geometry variant: [x, y] on a 2D patch, [x, y, z] on a 3D mesh.
+    """
+    radius_mm: float | None = Field(None, gt=0.0)
+    """
+    Radius of the stimulated ball in mm. Omit for a single-node stimulus.
+    """
+    voltage: float | None = Field(None, gt=0.0)
+    """
+    Stimulus amplitude in the cell model's voltage units.
+    """
+    time_model_units: float | None = None
+    """
+    When the stimulus fires, in the backend's model time units.
+    """
+
+
+class BipolarPair(BaseModel):
+    """
+    One realized bipolar electrode pair. Everything a consumer previously read from the per-trace columns lives here.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    pair_index: int = Field(..., ge=0)
+    """
+    Position of this pair in the list; the value a trace stores to reference it. Explicit rather than implied by array order so a filtered or reordered view can't silently renumber pairs.
+    """
+    electrode_indices: list[ElectrodeIndice] | None = Field(
+        None, max_length=2, min_length=2
+    )
+    """
+    The (a, b) indices into positions_mm whose difference forms the bipolar signal.
+    """
+    electrode_row: int | None = Field(None, ge=0)
+    """
+    Grid row this pair sits in. Was a per-trace column in 1.1.
+    """
+    height_mm: float | None = Field(None, ge=0.0)
+    """
+    Height of this pair above the tissue in mm. Was a per-trace column in 1.1. Equal to the placement's height_mm for a flat grid, but kept per pair so a non-planar placement (a 3D catheter) needs no schema change.
+    """
+    midpoint_mm: list[float] | None = Field(
+        None, max_length=3, min_length=2, title="PositionMm"
+    )
+    """
+    Midpoint of the two electrodes in mm — the point a bipolar trace is usually attributed to when relating it to the substrate beneath it.
+    """
+
+
+class Backend(RootModel[FinitewaveBackend]):
+    root: FinitewaveBackend = Field(..., discriminator="type", title="Backend")
+    """
+    The simulator that ran this simulation, plus its run-level capture knobs. Phase 1.5 ships Finitewave; openCARP / TorchCor would extend this union. Recorded because a trace's fidelity is not reproducible from the physics alone — sample rate and oversampling shape what reached the bank.
+    """
+
+
+class S1S2Activation(BaseModel):
+    """
+    An S1-S2 protocol: a train of conditioning stimuli followed by a premature one at a coupling interval, used to probe refractoriness. The stimulus itself is a nested SingleShotActivation, so an S1-S2 can be driven from an edge or a point without this variant restating either one's fields. Its `time_model_units` is IGNORED — protocol timing comes from the intervals below — and its `voltage` applies to every stimulus in the train. PROVISIONAL: this variant exists now so SEP7 can implement it in Wave 2 without a contracts bump, but the field set is the schema author's reading of the protocol, not a producer design that has been built. Confirm against SEP7's implementation before any bank is written with it; extending it later is additive.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["s1s2"]
+    site: PlanarEdgeActivation | PointActivation = Field(
+        ..., discriminator="type", title="SingleShotActivation"
+    )
+    """
+    The stimulus each S1 and the S2 delivers — an ordinary single-shot activation, whose own timing field is ignored in favour of the protocol's intervals.
+    """
+    s1_interval_ms: float = Field(..., gt=0.0)
+    """
+    Interval between successive S1 (conditioning) stimuli.
+    """
+    s2_interval_ms: float = Field(..., gt=0.0)
+    """
+    Coupling interval between the last S1 and the premature S2 — the knob that probes refractoriness.
+    """
+    n_s1: int | None = Field(None, ge=1)
+    """
+    Number of S1 stimuli delivered before the S2.
+    """
+
+
+class CenteredGrid2DElectrodes(BaseModel):
+    """
+    A rows x cols grid centred on a 2D patch, with consecutive within-row electrodes forming bipolar pairs (so a 5x5 grid yields 5 * 4 = 20 pairs). Mirrors specs.CenteredGrid2D. Height is sampled per simulation, so `height_mm` here is the realized value for THIS simulation, not a configured range — the range is a producer-side sampling decision recorded in the theta-spec when it is being swept.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    type: Literal["centered_grid_2d"]
+    n_rows: int = Field(..., ge=1)
+    """
+    Grid rows.
+    """
+    n_cols: int = Field(..., ge=2)
+    """
+    Grid columns. At least 2 — a bipolar pair needs two electrodes in a row.
+    """
+    spacing_mm: float = Field(..., gt=0.0)
+    """
+    Intra-row and inter-row electrode spacing in mm.
+    """
+    height_mm: float = Field(..., ge=0.0)
+    """
+    Realized electrode height above the tissue surface for this simulation, in mm. A strong driver of EGM amplitude and morphology, which is why it is a candidate sweep knob.
+    """
+    positions_mm: list[PositionMm] | None = None
+    """
+    (n_electrodes, D) electrode positions in mm, in the geometry's coordinate frame; D follows the active Geometry variant. Ordered row-major, so index = row * n_cols + col, which is what `pairs` indexes into.
+    """
+    pairs: list[BipolarPair]
+    """
+    The realized bipolar pairs, in trace order. A trace in the bank carries a `pair_index` into this list rather than repeating any of it per trace.
+    """
+
+
+class Electrodes(RootModel[CenteredGrid2DElectrodes]):
+    root: CenteredGrid2DElectrodes = Field(
+        ..., discriminator="type", title="Electrodes"
+    )
+    """
+    Electrode placement AND the realized per-pair detail for one simulation. This is where synthetic_bank 1.1's per-trace `electrode_row` / `electrode_height_mm` columns moved to: those values are per electrode pair, and every trace from one simulation shares the same placement, so storing them once per simulation and indexing by pair_index removes the repetition without losing anything.
+    """
+
+
+class Simulations(BaseModel):
+    """
+    Per-simulation columns. Maps to the HDF5 `simulations/` group. All columns have first dimension M (the simulation count) and are aligned. This group is the heart of the 2.0 restructure: a simulation has exactly one geometry, substrate, activation, cell model, electrode placement and label policy, shared by every trace it produced, so they are stored once here and referenced by `traces/simulation_id` rather than repeated per trace. Each `*_json` column holds one JSON-encoded typed object per row; the schema below describes the DECODED form.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    simulation_id: list[int]
+    """
+    (M,) int64 — the simulation's identifier, unique within the bank. This is the join key: traces reference it, and it is also the key egm-data uses to pair a ClassifierBank trace back to its generation config.
+    """
+    seed: list[int]
+    """
+    (M,) int64 — RNG seed for this simulation. Per simulation, not per trace: one seed drove the substrate draw and the electrode-height sample for the whole simulation, so recording it per trace (as 1.1 did) repeated one number N times and invited the reading that traces differ by seed.
+    """
+    geometry: list[Geometry]
+    """
+    (M,) UTF-8 JSON — the tissue domain per simulation.
+    """
+    cell_model: list[
+        Annotated[
+            CourtemancheCellModel | AlievPanfilovCellModel, Field(discriminator="type")
+        ]
+    ]
+    """
+    (M,) UTF-8 JSON — the cellular electrophysiology model per simulation. Was a bank-level `cell_model` string in 1.1, which could not carry the model's parameters at all.
+    """
+    substrate: list[Substrate]
+    """
+    (M,) UTF-8 JSON — the REQUESTED substrate pattern per simulation. Replaces 1.1's per-trace `fibrosis_density` scalar, which could describe only a uniform-random draw.
+    """
+    substrate_summary: list[SubstrateSummary]
+    """
+    (M,) UTF-8 JSON — what the substrate draw actually REALIZED, e.g. the realized fibrotic fraction. Replaces 1.1's per-trace `fibrosis_density_realized`. Kept separate from the requested parameters because the two genuinely differ (grid discretization) and the label is computed from this one.
+    """
+    activation: list[
+        Annotated[
+            PlanarEdgeActivation | PointActivation | S1S2Activation,
+            Field(discriminator="type"),
+        ]
+    ]
+    """
+    (M,) UTF-8 JSON — how the wave was initiated. Replaces 1.1's per-trace `stim_edge` enum, which could name only one of four edges of a 2D patch.
+    """
+    electrodes: list[Electrodes]
+    """
+    (M,) UTF-8 JSON — electrode placement plus the realized per-pair list. Absorbs 1.1's per-trace `electrode_row` and `electrode_height_mm`: a trace now carries `pair_index` into this object's `pairs` list instead.
+    """
+    backend: list[Backend]
+    """
+    (M,) UTF-8 JSON — the simulator and its capture knobs. Was a bank-level `simulator` string in 1.1.
+    """
+    label_policy: list[
+        Annotated[GlobalDensityLabel | LocalDensityLabel, Field(discriminator="type")]
+    ]
+    """
+    (M,) UTF-8 JSON — the rule that turned this simulation's realized substrate into the integer labels its traces carry. Per simulation, so a bank may in principle mix policies; a consumer that cares must check rather than assume.
+    """
+    label_names: list[dict[constr(pattern=r"^[0-9]+$"), str]]
+    """
+    (M,) UTF-8 JSON — {int: name} map giving each label value its meaning. Without it the `label` column is an unexplained integer, and its meaning has already changed once (a density scalar became a binary class) and changes again at multiclass severity.
+    """
+
+
 class SyntheticBank(BaseModel):
     """
-    Synthetic intracardiac EGM bank (may include real-noise conditioning at the signal level). Schema version 1.1. Maps to an HDF5 file with bank-level root attrs plus a `traces/` group containing per-trace columns. 1.1 (from 1.0) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage).
+    Synthetic intracardiac EGM bank (may include real-noise conditioning at the signal level). Schema version 2.0. Maps to an HDF5 file with bank-level root attrs, a `simulations/` group holding one row per simulation, and a `traces/` group holding one row per bipolar trace. 2.0 is a BREAKING restructure of 1.1: generation parameters moved out of `traces/` and are now stored once per simulation as typed, polymorphic objects (see simulation_config.schema.json), the per-trace label became a plain integer with its policy and name map recorded per simulation, and `generation_params` became the bank-scoped theta-spec (see generation_params.schema.json). WHY BREAK IT: 1.1's flat per-trace columns each hard-coded a Phase-1 assumption — `fibrosis_density` presumed a uniformly-random substrate, `stim_edge` presumed a planar wave on a 2D patch, `electrode_height_mm` presumed a flat grid — so every new cell model, substrate type or stimulus protocol forced either new trace columns or a silent change of meaning in existing ones. It also repeated per trace what is constant per simulation. NO BACKWARD COMPATIBILITY: 1.1 banks are not readable by a 2.0 reader and there is no migration path. That is deliberate and cheap right now — no released work depends on a 1.1 bank, and the banks are regenerated from config in hours. The same decision after publication would not be available.
     """
 
     model_config = ConfigDict(
@@ -106,75 +603,44 @@ class SyntheticBank(BaseModel):
     )
     schema_version: SchemaVersion
     """
-    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions.
+    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions — and a 1.x bank must be refused rather than partially read, since 2.0 moved fields rather than adding them.
     """
     created_utc: AwareDatetime
     """
     ISO-8601 UTC timestamp captured at write time.
     """
     bank_id: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
-    Stable artifact ID for this bank, e.g. 'tbank_synthetic_courtemanche_v1_5_2026-06-25'. Optional for legacy banks written before egm-contracts v0.5.0; egm-data stamps it on every new bank (enforced at write time, not by this schema, per the cross-artifact-linkage 'optional-in-schema, required-on-write' decision). Added 1.1.
+    Stable artifact ID for this bank, e.g. 'tbank_synthetic_courtemanche_v1_5_2026-06-25'. Optional in-schema; egm-data stamps it on every new bank (the 'optional-in-schema, required-on-write' convention shared by the other banks).
     """
     description: str | None = None
     """
-    Free-text human-readable description of this bank's intent (e.g., 'hybrid_v1 — 100 sims, 20 traces/sim, SNR 10-25 dB').
+    Free-text human-readable description of this bank's intent (e.g. '100 sims, 20 traces/sim, SNR 10-25 dB').
     """
     fs_hz: float = Field(..., gt=0.0)
     """
-    Sampling rate in Hz. Phase 1 is 1000.0 to match IAFDB.
+    Sampling rate in Hz of the stored traces. Phase 1 is 1000.0 to match IAFDB; the synthetic and real corpora must share a rate for lag-based features to be comparable at all.
     """
     trace_duration_ms: float = Field(..., gt=0.0)
     """
-    Per-trace duration in milliseconds.
-    """
-    simulator: str
-    """
-    Simulator backend identifier. Phase 1 = 'finitewave'.
-    """
-    cell_model: str
-    """
-    Cellular electrophysiology model. Phase 1 = 'aliev_panfilov'.
-    """
-    patch_size_mm: float | None = Field(None, ge=0.0)
-    """
-    Tissue patch side length in mm (square patch). Phase 1 = 40 mm.
-    """
-    patch_dr_mm: float | None = Field(None, gt=0.0)
-    """
-    Spatial discretization step in mm. Phase 1 = 0.25 mm.
-    """
-    ap_time_unit_ms: float | None = Field(None, ge=0.0)
-    """
-    Mapping from simulator's non-dimensional time to ms (Aliev-Panfilov-specific; 0 for fully dimensional simulators).
-    """
-    fibrosis_strategy_name: str
-    """
-    Identifier for the fibrosis substrate generation strategy. Phase 1 = 'uniform_random'.
-    """
-    fibrosis_params: dict[str, Any] | None = None
-    """
-    Parameters of the fibrosis strategy. Stored on HDF5 as a JSON-encoded string attr (`fibrosis_params_json`) since HDF5 attrs are flat. Schema models the decoded structure.
-    """
-    electrode_config: dict[str, Any] | None = None
-    """
-    Electrode grid configuration (grid shape, spacing, height range). Stored on HDF5 as JSON in `electrode_config_json`.
-    """
-    mixer_config: dict[str, Any] | None = None
-    """
-    Noise mixer configuration (target SNR range, band, on/off knob). Stored on HDF5 as JSON in `mixer_config_json`.
-    """
-    experiment_config: dict[str, Any] | None = None
-    """
-    Top-level experiment knobs that drove this bank's generation. Stored on HDF5 as JSON in `experiment_config_json`.
+    Per-trace duration in milliseconds. Coupled across the pipeline: the same value drives the simulator's capture window, the IAFDB splitter, and the classifier's input length.
     """
     noise_bank_source: str | None = None
     """
-    Identifier of the IAFDB noise bank consumed by the mixer (e.g., 'iafdb_noise_v1.h5').
+    Identifier of the noise bank consumed by the mixer (e.g. 'nbank_iafdb_2026-06-15'). Empty or absent when the bank is clean (mixer off).
+    """
+    generation_params: GenerationParams
+    """
+    The bank-scoped theta-spec: which knobs this bank's sweep varied and within which structural regime. Required, and meaningful even for an unswept bank — a fixed-parameter bank records its regime with an empty knob list, which states 'nothing varied' rather than leaving it unknown. Stored JSON-encoded in the `generation_params_json` root attr.
+    """
+    simulations: Simulations
+    """
+    Per-simulation columns. Maps to the HDF5 `simulations/` group. All columns have first dimension M (the simulation count) and are aligned. This group is the heart of the 2.0 restructure: a simulation has exactly one geometry, substrate, activation, cell model, electrode placement and label policy, shared by every trace it produced, so they are stored once here and referenced by `traces/simulation_id` rather than repeated per trace. Each `*_json` column holds one JSON-encoded typed object per row; the schema below describes the DECODED form.
     """
     traces: Traces
     """
-    Per-trace columns. Maps to the HDF5 `traces/` group. All columns have first dimension N (the trace count) and are aligned.
+    Per-trace columns — one row per bipolar electrode pair per simulation. Maps to the HDF5 `traces/` group. All columns have first dimension N and are aligned. After the 2.0 restructure a trace carries only its identity, its signal, its label, and its own noise provenance: everything describing HOW it was generated is reached through `simulation_id`, and everything about WHERE its electrodes sat is reached through `pair_index`.
     """

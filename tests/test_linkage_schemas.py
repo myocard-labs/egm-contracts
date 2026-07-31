@@ -21,6 +21,7 @@ import h5py
 from myocard_egm_contracts.schema_info import current_version, get_schema, supported_versions
 from myocard_egm_contracts.validators import (
     validate_figure_spec,
+    validate_noise_bank,
     validate_observation,
     validate_phase_manifest,
     validate_synthetic_bank,
@@ -217,6 +218,53 @@ def test_manifest_bad_artifact_id_fails(tmp_path: Path) -> None:
     )
 
 
+_ENTRY_SECTIONS = (
+    "egm_banks",
+    "noise_banks",
+    "training_runs",
+    "models",
+    "observations",
+    "figures",
+    "papers",
+)
+
+
+def test_manifest_entries_validate_without_producer_fields(tmp_path: Path) -> None:
+    """B19: `produced_by_package` / `produced_by_version` are optional on every
+    entry type, so the curator can index an artifact whose producer isn't
+    knowable (hand-added, externally produced, predating the convention)
+    instead of writing "unknown" / "0" sentinels that are indistinguishable
+    from a real producer stamp. Strips them from ALL seven sections at once —
+    the loosening has to be uniform, since a half-applied change leaves the
+    curator guessing which entry types tolerate it."""
+    doc = copy.deepcopy(GOOD_MANIFEST)
+    for section in _ENTRY_SECTIONS:
+        for entry in doc[section]:
+            entry.pop("produced_by_package", None)
+            entry.pop("produced_by_version", None)
+    result = validate_phase_manifest(_write_json(tmp_path, "manifest.json", doc))
+    assert result.ok, result.issues
+
+
+def test_manifest_entries_still_validate_with_producer_fields(tmp_path: Path) -> None:
+    """The other half of B19: optional means optional, not removed. The fully
+    stamped manifest (GOOD_MANIFEST fills both on every entry) must keep
+    validating — producers still write them."""
+    result = validate_phase_manifest(_write_json(tmp_path, "manifest.json", GOOD_MANIFEST))
+    assert result.ok, result.issues
+
+
+def test_manifest_entry_still_requires_id_and_path(tmp_path: Path) -> None:
+    """The loosening stops at the producer fields — an entry without a path is
+    a pointer that points nowhere, so it stays required."""
+    for missing in ("id", "path"):
+        doc = copy.deepcopy(GOOD_MANIFEST)
+        doc["egm_banks"][0].pop(missing)
+        result = validate_phase_manifest(_write_json(tmp_path, "manifest.json", doc))
+        assert not result, f"entry without {missing} should fail"
+        assert any(missing in i for i in result.issues), (missing, result.issues)
+
+
 def test_manifest_bad_usage_tag_fails(tmp_path: Path) -> None:
     doc = copy.deepcopy(GOOD_MANIFEST)
     doc["figures"][0]["usage_tag"] = "totally_made_up"
@@ -338,6 +386,43 @@ def test_synthetic_bank_with_malformed_bank_id_fails(valid_synthetic_bank: Path)
     with h5py.File(valid_synthetic_bank, "r+") as f:
         f.attrs["bank_id"] = "NOT-a-valid-id"
     result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("bank_id" in i or "does not match" in i for i in result.issues), result.issues
+
+
+def test_noise_bank_without_bank_id_still_validates(valid_noise_bank: Path) -> None:
+    """Same optional-in-schema / required-on-write treatment as the other banks:
+    a bank written before 1.1 has no id and must still validate."""
+    with h5py.File(valid_noise_bank, "r") as f:
+        assert "bank_id" not in f.attrs
+    result = validate_noise_bank(valid_noise_bank)
+    assert result.ok, result.issues
+
+
+def test_noise_bank_with_valid_bank_id_validates(valid_noise_bank: Path) -> None:
+    """The point of 1.1: egm-studio reads the id off the .h5 instead of the sidecar."""
+    with h5py.File(valid_noise_bank, "r+") as f:
+        f.attrs["bank_id"] = "nbank_iafdb_2026-06-15"
+    result = validate_noise_bank(valid_noise_bank)
+    assert result.ok, result.issues
+
+
+def test_noise_bank_with_malformed_bank_id_fails(valid_noise_bank: Path) -> None:
+    with h5py.File(valid_noise_bank, "r+") as f:
+        f.attrs["bank_id"] = "NOT-a-valid-id"
+    result = validate_noise_bank(valid_noise_bank)
+    assert not result
+    assert any("bank_id" in i or "does not match" in i for i in result.issues), result.issues
+
+
+def test_noise_bank_with_unknown_role_prefix_fails(valid_noise_bank: Path) -> None:
+    """B16 reaching a real field: a well-shaped id with an invented role prefix
+    used to validate here, and only became a problem downstream. The bank's role
+    is NOT checked against the prefix (an nbank_ vs tbank_ mismatch is egm-data's
+    content check) — this asserts only that the prefix is a known role at all."""
+    with h5py.File(valid_noise_bank, "r+") as f:
+        f.attrs["bank_id"] = "noisebank_iafdb_2026-06-15"
+    result = validate_noise_bank(valid_noise_bank)
     assert not result
     assert any("bank_id" in i or "does not match" in i for i in result.issues), result.issues
 

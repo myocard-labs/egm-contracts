@@ -33,6 +33,14 @@ One row per epoch. Columns in this order:
   **Required and finite.**
 - **`train_loss`** — mean training-set loss across batches.
   **Required and finite.**
+- **`train_auroc`** / **`train_accuracy`** / **`train_precision`** /
+  **`train_recall`** / **`train_f1`** / **`train_ece`** — *added in
+  egm-contracts v0.6.0.* The training-split counterparts of the `val_*`
+  metrics below, with the same definitions and the same nullability rules.
+  Additionally absent altogether from CSVs written before the producer
+  emitted them. `train_ece` carries one caveat the val twin doesn't: it is
+  computed from predictions accumulated *during* the epoch, so it describes
+  the model as it changed, not a single fixed model.
 - **`val_loss`** — mean validation-set loss across batches.
   **Required and finite.** (Which split is "validation" is defined
   in the run config, not here.)
@@ -58,6 +66,16 @@ The required-non-null vs nullable distinction matters: if `lr` or
 worth surfacing, not legitimate data. The validators fail-fast on
 malformed writes rather than silently propagating NaN into
 downstream plots.
+
+### Why train and val are interleaved, not appended
+
+The column order pairs the two blocks — `epoch, lr, train_loss, train_*,
+val_loss, val_*, epoch_seconds` — rather than appending the train metrics
+after the val ones. Appending would have been the smaller change. The reason
+for carrying both splits at all is to read the *divergence* between them, and
+in a spreadsheet or a printed table that only jumps out when each metric sits
+next to its twin. Consumers read by header name, so the order is presentation,
+not parsing — which is exactly why it's worth choosing deliberately.
 
 ## CSV serialization conventions
 
@@ -91,11 +109,15 @@ wanting a quick "did this run converge" view.
 ## Example
 
 ```csv
-epoch,lr,train_loss,val_loss,val_auroc,val_accuracy,val_precision,val_recall,val_f1,val_ece,epoch_seconds
-1,0.001,0.4500,0.4200,0.85,0.78,0.80,0.76,0.78,0.05,12.3
-2,0.001,0.3200,0.3800,0.89,0.82,0.85,0.79,0.82,0.04,11.9
-3,0.001,0.2500,0.3500,,0.85,,0.83,,0.03,12.1
+epoch,lr,train_loss,train_auroc,train_accuracy,train_precision,train_recall,train_f1,train_ece,val_loss,val_auroc,val_accuracy,val_precision,val_recall,val_f1,val_ece,epoch_seconds
+1,0.001,0.4500,0.87,0.80,0.82,0.78,0.80,0.04,0.4200,0.85,0.78,0.80,0.76,0.78,0.05,12.3
+2,0.001,0.3200,0.92,0.86,0.88,0.84,0.86,0.03,0.3800,0.89,0.82,0.85,0.79,0.82,0.04,11.9
+3,0.001,0.2500,0.96,0.91,0.92,0.90,0.91,0.02,0.3500,,0.85,,0.83,,0.03,12.1
 ```
 
 Row 3 has an empty cell for `val_auroc` — could be because the val
 split was all-one-class that epoch, hence AUROC was undefined.
+
+The example also shows what the train block is *for*: train AUROC climbing
+0.87 → 0.96 while val AUROC stalls is the divergence signature that
+validation metrics alone can't distinguish from a task that's simply hard.

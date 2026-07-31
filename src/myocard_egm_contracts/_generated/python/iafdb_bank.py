@@ -10,10 +10,10 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, RootModel
 
 class SchemaVersion(Enum):
     """
-    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions. 1.1 (from 1.0) added: 'none' to threshold_mode enum + nullable threshold_value, for the unfiltered-export path (every window, no healthy threshold). 1.2 (from 1.1) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage). Pre-1.0 of egm-contracts: enum-of-one pattern per project/schema_evolution.md (no in-the-wild back-compat needed yet); when v1.0 ships, this enum may grow to accept multiple supported versions.
+    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions. 1.1 (from 1.0) added: 'none' to threshold_mode enum + nullable threshold_value, for the unfiltered-export path (every window, no healthy threshold). 1.2 (from 1.1) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage). 1.3 (from 1.2) added the optional `run_record_path` sidecar pointer + the optional per-trace `activation_position` (egm-contracts v0.6.0). Pre-1.0 of egm-contracts: enum-of-one pattern per project/schema_evolution.md (no in-the-wild back-compat needed yet); when v1.0 ships, this enum may grow to accept multiple supported versions.
     """
 
-    field_1_2 = "1.2"
+    field_1_3 = "1.3"
 
 
 class Source(Enum):
@@ -66,6 +66,27 @@ class PeakToPeakMvItem(RootModel[float]):
     root: float = Field(..., ge=0.0)
 
 
+class FigureId(RootModel[str]):
+    root: str = Field(..., pattern="^fig_[A-Za-z0-9_\\-]+$")
+    """
+    Figure identifier. Slug-based (hyphens allowed, no date suffix), so it does NOT match the dated ArtifactId pattern. e.g. fig_feature_distributions_synth_vs_iafdb.
+    """
+
+
+class PaperId(RootModel[str]):
+    root: str = Field(..., pattern="^paper_[a-z0-9_]+$")
+    """
+    Paper identifier (e.g. paper_phase_1_5_realism). Slug-based, no date.
+    """
+
+
+class ActivationPosition(RootModel[float]):
+    root: float = Field(..., ge=0.0, le=1.0)
+    """
+    Realized position of the activation within a trace, as a fraction of the trace: 0.0 = first sample, 1.0 = last sample. Rate- and length-independent by construction; convert at point of use with idx = round(frac * (T - 1)). This is the position the activation-aware splitter/crop ACTUALLY produced (the anchor it placed), not a value measured from the waveform afterwards - a consumer that wants the measured dV/dt-max position computes it with egm-features instead. Stored per trace by both corpora (iafdb_bank via IAF1, synthetic_bank via SEP2) so the synthetic-vs-IAFDB position distributions are compared stored-vs-stored rather than one stored against one recomputed. Defined once here and $ref'd by both banks so the two cannot drift. OPTIONAL-IN-SCHEMA / REQUIRED-ON-WRITE in activation mode, and PERMANENTLY so - the field is meaningful only for single-activation traces. It is absent whenever no single anchor exists: sliding-window extraction (no activation anchor at all), multi-beat traces (several activations, so no one position describes the trace), and any bank written before its producer's splitter shipped. Consumers MUST treat absence as 'unknown position' - never as 0.0, which is a legitimate value meaning the activation sits on the first sample, so defaulting would fabricate a spike at the low edge of the distribution.
+    """
+
+
 class Traces(BaseModel):
     """
     Per-trace columns. Maps to the HDF5 `traces/` group. All columns have first dimension N (the segment count) and are aligned.
@@ -102,25 +123,15 @@ class Traces(BaseModel):
     """
     (N,) float32 — Per-patient scalar applied to this segment during R-wave anchoring. signal_in_mv = signal_raw * calibration_scalar.
     """
-
-
-class FigureId(RootModel[str]):
-    root: str = Field(..., pattern="^fig_[A-Za-z0-9_\\-]+$")
+    activation_position: list[ActivationPosition] | None = None
     """
-    Figure identifier. Slug-based (hyphens allowed, no date suffix), so it does NOT match the dated ArtifactId pattern. e.g. fig_feature_distributions_synth_vs_iafdb.
-    """
-
-
-class PaperId(RootModel[str]):
-    root: str = Field(..., pattern="^paper_[a-z0-9_]+$")
-    """
-    Paper identifier (e.g. paper_phase_1_5_realism). Slug-based, no date.
+    (N,) float32 — Realized activation position within each window, as a [0,1] fraction of the trace (see common.schema.json ActivationPosition for the convention). Written by the activation-aware splitter, which anchors each window on a detected activation; it is what the splitter PRODUCED, not a measurement taken from the waveform afterwards. OPTIONAL, and permanently so — see common.ActivationPosition for the full rule. Absent on sliding-window banks (no anchor exists), on multi-beat traces (no single position describes them), and on activation-mode banks written before the splitter shipped: Phase-1.5 Wave 1 adds this column, Wave 2 (IAF1) populates it. Readers MUST treat absence as 'unknown position', not zero. Its counterpart on synthetic_bank carries the identical definition so the two corpora's position distributions are compared stored-vs-stored. Added 1.3.
     """
 
 
 class IafdbBank(BaseModel):
     """
-    Calibrated + band-pass-filtered bipolar EGM segments extracted from PhysioNet IAFDB. Schema version 1.2. Symmetric with SyntheticBank: maps to an HDF5 file with bank-level root attrs plus a `traces/` group containing per-trace columns. No `label` column — labeling is downstream policy applied at ClassifierBank conversion time by a consumer-supplied label_fn. 1.2 (from 1.1) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage).
+    Calibrated + band-pass-filtered bipolar EGM segments extracted from PhysioNet IAFDB. Schema version 1.3. Symmetric with SyntheticBank: maps to an HDF5 file with bank-level root attrs plus a `traces/` group containing per-trace columns. No `label` column — labeling is downstream policy applied at ClassifierBank conversion time by a consumer-supplied label_fn. 1.2 (from 1.1) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage). 1.3 (from 1.2) added the optional `run_record_path` sidecar pointer and the optional per-trace `activation_position` (egm-contracts v0.6.0, Phase 1.5).
     """
 
     model_config = ConfigDict(
@@ -128,17 +139,22 @@ class IafdbBank(BaseModel):
     )
     schema_version: SchemaVersion
     """
-    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions. 1.1 (from 1.0) added: 'none' to threshold_mode enum + nullable threshold_value, for the unfiltered-export path (every window, no healthy threshold). 1.2 (from 1.1) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage). Pre-1.0 of egm-contracts: enum-of-one pattern per project/schema_evolution.md (no in-the-wild back-compat needed yet); when v1.0 ships, this enum may grow to accept multiple supported versions.
+    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions. 1.1 (from 1.0) added: 'none' to threshold_mode enum + nullable threshold_value, for the unfiltered-export path (every window, no healthy threshold). 1.2 (from 1.1) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage). 1.3 (from 1.2) added the optional `run_record_path` sidecar pointer + the optional per-trace `activation_position` (egm-contracts v0.6.0). Pre-1.0 of egm-contracts: enum-of-one pattern per project/schema_evolution.md (no in-the-wild back-compat needed yet); when v1.0 ships, this enum may grow to accept multiple supported versions.
     """
     created_utc: AwareDatetime
     """
     ISO-8601 UTC timestamp captured at write time.
     """
     bank_id: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Stable artifact ID for this bank, e.g. 'upred_iafdb_v1_5_2026-06-25' or 'nbank_iafdb_2026-06-15'. Optional for legacy banks written before egm-contracts v0.5.0; egm-data stamps it on every new bank (enforced at write time, not by this schema). Added 1.2.
+    """
+    run_record_path: str | None = None
+    """
+    Relative path to a sibling JSON run record holding this bank's per-record extraction diagnostics, e.g. 'iafdb_healthy_v1_run_record.json'. Relative to the bank file's own directory, mirroring the noise_bank <-> noise_bank_run_record sibling convention. Optional: a bank written without the audit report simply omits it, and readers MUST treat absence as 'no sidecar', not as an error. The record's own schema is deliberately NOT formalized yet (the methods paper may reshape it); until it is, the file is documented-but-unvalidated JSON, which is why this is a path rather than an embedded object. Added 1.3.
     """
     source: Source
     """

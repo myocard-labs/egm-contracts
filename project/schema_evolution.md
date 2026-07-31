@@ -218,6 +218,24 @@ introduction version.
 
 ### common
 
+- **(v0.6.0)** — two changes, both Phase-1.5 Wave 1:
+  - **`ArtifactId` role-prefix validation (B16)** — pattern tightened from
+    `^[a-z]+_...` to an explicit alternation of the eight known artifact roles
+    (`tbank|ptbank|lpred|upred|nbank|run|model|obs`). `fig_` / `paper_` are
+    excluded deliberately: figures and papers carry `FigureId` / `PaperId`.
+    **A narrowing, not a relaxation** — an id with an invented or typo'd prefix
+    that used to validate now fails, which is the point (previously it surfaced
+    downstream as an unclassifiable artifact instead). Every id in use still
+    validates. The vocabulary stays single-sourced in `codegen/roles.json`; the
+    schema remains hand-written, with `tests/test_roles.py` asserting the
+    alternation matches that source so the two can't drift.
+  - **`ActivationPosition` added** — the `[0,1]` activation fraction shared by
+    `iafdb_bank` and `synthetic_bank`, defined once here and `$ref`'d by both so
+    the two corpora cannot diverge (their position distributions get compared to
+    each other; a per-schema copy is exactly how that comparison would silently
+    go wrong).
+  - Common-only: no document schema's `schema_version` changes on account of
+    these, though all regenerate since they inline the patterns.
 - **(v0.5.3)** — `ArtifactId` date suffix made optional: pattern relaxed from
   `^[a-z]+_[a-z0-9_]+_\d{4}-\d{2}-\d{2}(_v\d+)?$` to
   `^[a-z]+_[a-z0-9_]+(_\d{4}-\d{2}-\d{2})?(_v\d+)?$` so a hand-set id (e.g. a
@@ -252,8 +270,155 @@ introduction version.
 - **1.0** — egm-contracts v0.3.0. Initial release of this schema
   (renamed from `model_metadata`).
 
+### synthetic_bank
+
+- **2.0 — BREAKING** — egm-contracts v0.6.0, Phase-1.5 Wave 1 (CON1). The
+  restructure the migration wave exists for. Generation parameters moved out of
+  `traces/` into a new **`simulations/`** group, one row per simulation, holding
+  typed polymorphic objects per generation function (`simulation_config.schema.json`);
+  `generation_params` became the bank-scoped **θ-spec**
+  (`generation_params.schema.json`) at root attrs; the label became a plain
+  **int** with its policy + `{int: name}` map recorded per simulation; and a new
+  optional per-trace `activation_position` landed (CL-060).
+  - **Removed from `traces/`:** `fibrosis_density`, `fibrosis_density_realized`,
+    `stim_edge`, `electrode_row`, `electrode_height_mm`, `seed`. **Removed from
+    root:** `simulator`, `cell_model`, `patch_size_mm`, `patch_dr_mm`,
+    `ap_time_unit_ms`, `fibrosis_strategy_name`, `fibrosis_params`,
+    `electrode_config`, `mixer_config`, `experiment_config`.
+  - **Why break rather than extend:** each removed column encoded a Phase-1
+    assumption (a scalar density presumes a uniform-random draw; a four-value
+    `stim_edge` presumes a planar wave on a 2D patch), so every new cell model,
+    substrate or stimulus forced either new columns or a **silent change of
+    meaning** in an existing one — a bank would keep validating while meaning
+    something different. They were also per-trace copies of per-simulation facts.
+  - **No migration path, deliberately.** A 1.1 bank is refused outright rather
+    than partially read, since a partial read would drop the generation config —
+    the thing worth keeping. Affordable only because nothing released depends on
+    a 1.1 bank and banks regenerate from config in hours; the same call after
+    publication would not be available. Resolves the long-standing `stim_edge`
+    entry in `known_issues.md`, which had anticipated the stimulus problem but
+    not that three sibling columns shared it.
+  - **Cross-group key:** `traces/simulation_id` → `simulations/simulation_id` is
+    not expressible in JSON Schema, so the validator checks it directly; an
+    orphan id is a trace whose provenance can't be resolved.
+
+### simulation_config *(new, v0.6.0)*
+
+- Shared `$defs` library — no `schema_version`, no document validator. Seven
+  `type`-discriminated unions (geometry / cell_model / substrate / activation /
+  electrodes / backend / label_policy) plus `SubstrateSummary`, `LabelNames`,
+  `BipolarPair`, and the single-sourced `Edge` + `PositionMm`. Discriminators
+  mirror synthetic-egm-pipeline's `simulate/specs.py` `Literal`s exactly.
+  Adding a **variant** is additive; adding a required field to an existing
+  variant is breaking and needs the referencing bank schema to bump.
+
+### generation_params *(new, v0.6.0)*
+
+- Shared `$defs` library holding `TunedParam` + `GenerationParams` — the
+  bank-scoped θ-spec. **Separate from `simulation_config` on purpose:** that
+  describes ONE simulation, this describes the sweep that produced many, and the
+  two are stored in different places (per-sim group vs root attr). Linked only by
+  `TunedParam.path`, an opaque dotted string, so neither schema depends on the
+  other. `path` ships without a grammar (CL-024 deferred the resolver);
+  constraining it later is additive.
+
+### training_metrics
+
+- **(v0.6.0, no `schema_version` — a CSV row has nowhere to carry one)** —
+  added the six nullable `train_*` columns (`train_auroc` / `train_accuracy` /
+  `train_precision` / `train_recall` / `train_f1` / `train_ece`), mirroring
+  their `val_*` twins, plus a rewritten `x-csv-column-order` that **pairs the
+  blocks**: `epoch, lr, train_loss, train_*, val_loss, val_*, epoch_seconds`.
+  Appending the train block after the val block was the smaller edit and was
+  rejected — the reason for carrying both splits is reading their divergence,
+  which a spreadsheet makes obvious only when the pairs are adjacent, and the
+  schema already tells consumers to read by header name so reordering is safe.
+  - **Why it couldn't wait:** the schema is `additionalProperties: false`, so
+    an un-bumped validator actively *rejects* a CSV carrying the new columns.
+    The columns had to exist here before any producer could emit them, which
+    is why this landed in v0.6.0 rather than alongside the emit (CL-037 →
+    CL-024).
+  - `required` is unchanged — the new columns are nullable and absent from
+    CSVs written before the producer emitted them.
+  - **Not added:** `train_reliability` bins. The CSV carries scalars only and
+    ECE is already the scalar summary of those bins (feature backlog FB-10).
+  - **CI note:** with no `schema_version` to compare, `check_schema_versions.py`
+    classifies this file as NEW rather than DRIFT, so it does not add to the
+    `skip-schema-bump` requirement `phase_manifest` already creates.
+
+### training_run_record
+
+- **1.2** — egm-contracts v0.6.0. Phase-1.5 Wave 1; two schema changes + two
+  conventions:
+  - **`EpochRecord.train_metrics`** (CLF2) — the per-epoch training-split
+    bundle, mirroring `val_metrics` key-for-key. Makes train-vs-val divergence
+    readable from the record; with validation metrics alone an overfitting run
+    and a genuinely-hard-task run are indistinguishable. **Optional-in-schema /
+    required-on-write** and deliberately *not* in `required`: Wave 1 (CLF5)
+    adopts the schema before Wave 2 (CLF2) emits the field, so requiring it
+    would drag feature work into the migration wave.
+  - **`HeldOutTest` parity with the val bundle** (B18) — `metrics` was
+    `additionalProperties: {number|integer|null}`, i.e. flat scalars only, so a
+    producer writing the *same* bundle it writes per-epoch (which carries a
+    nested `confusion`) had its test block rejected while its epochs passed.
+    Now `additionalProperties: true`, matching `val_metrics`; `reliability`
+    documented as mirroring `val_reliability`. One render path for train / val
+    / test. Also records the **producer semantic**: test metrics come from the
+    **best** epoch's weights, not the last — the last epoch describes a model
+    nobody ships.
+  - **`host` dropped from the well-known `run` keys** (B15) — convention only;
+    the object stays `additionalProperties: true`, so legacy records carrying
+    it still validate. It never answered a question asked of a run record and
+    was the one field identifying a person's machine rather than the
+    experiment.
+  - **Config artifact paths repo-relative** (B14) — convention only; absolute
+    paths pin a record to the machine that wrote it.
+
+### phase_manifest
+
+- **(v0.6.0, `schema_version` unchanged at `1`)** — two backward-compatible
+  changes, both Phase-1.5 Wave 1:
+  - **`produced_by_package` / `produced_by_version` dropped from every entry's
+    `required` array** (B19) — all seven entry types (`EgmBankEntry`,
+    `NoiseBankEntry`, `TrainingRunEntry`, `ModelEntry`, `ObservationEntry`,
+    `FigureEntry`, `PaperEntry`). The curator can index an artifact whose
+    producer isn't knowable; the old requirement forced `"unknown"` / `"0"`
+    sentinels that were indistinguishable from a genuine stamp. `id` + `path`
+    stay required — an entry is a pointer, and one without a path points
+    nowhere.
+  - **`path` descriptions corrected** on all seven entries: paths are relative
+    to the **phase folder**, not the meta repo. `EgmBankEntry` said "relative
+    to the meta repo (or absolute)", which became wrong under egm-studio's
+    phase-storage work (B17); the other six carried no description at all. No
+    structural change — `path` is still an unconstrained string, so the
+    convention is enforced by the validator script rather than the schema
+    (CL-051).
+  - **No `schema_version` bump:** loosening `required` and editing descriptions
+    are both backward-compatible, and this schema is major-only (enum-of-one).
+    Note the consequence for CI — `check_schema_versions.py` sees a changed
+    schema whose version didn't move and flags DRIFT, so the PR carrying this
+    needs the `skip-schema-bump` label.
+
 ### iafdb_bank
 
+- **1.3** — egm-contracts v0.6.0. Two optional additions, both Phase-1.5 Wave 1:
+  - `run_record_path` root attr (B11) — relative pointer to a sibling JSON
+    run record of per-record extraction diagnostics, mirroring the
+    `noise_bank` ↔ `noise_bank_run_record` convention. The **record's own
+    schema is deliberately not formalized** (P6): the methods paper may
+    reshape it, so for 1.5 it stays documented-but-unvalidated JSON and this
+    field is a path rather than an embedded object. The attr ships **unset**
+    in Wave 1 — the `--report` generator that fills it is Wave-2 work.
+  - `traces/activation_position` (CL-052) — the realized `[0,1]` activation
+    position per window, `$ref`ing the shared `common.ActivationPosition`.
+    Column lands here in Wave 1 **unpopulated**; IAF1's splitter fills it in
+    Wave 2. Optional for two independent reasons: the sliding-window path has
+    no activation anchor at all, and requiring it would drag Wave-2 splitter
+    work into the schema wave. **Why it's worth a field:** T1 claims the
+    synthetic and real position distributions can be *matched*; without the
+    realized real distribution stored, that claim can't be checked from the
+    artifacts (STU5 would compare a measured distribution against an assumed
+    one).
 - **1.2** — egm-contracts v0.5.0. Added the optional `bank_id`
   stable-artifact identifier (HDF5 root attr). Cross-artifact
   linkage wave.
@@ -262,12 +427,26 @@ introduction version.
   (every window, no healthy threshold). (Backfilled change-log
   entry — the bump predated this log section.)
 
+### noise_bank
+
+- **1.1** — egm-contracts v0.6.0. Added the optional `bank_id`
+  stable-artifact identifier as a root attr (B20), bringing the noise bank
+  up to the cross-artifact-linkage baseline the other banks already carry.
+  **Reverses the v0.5.0 placement decision** recorded under
+  `noise_bank_run_record` 1.1 below: putting the id *only* on the sidecar
+  meant a consumer had to locate and parse the JSON before it could tell
+  which bank it had open (egm-studio's noise view, STU2). The sidecar keeps
+  its copy — both are optional-in-schema, and egm-data checks they agree
+  when both are present, since a cross-file equality check isn't
+  expressible in JSON Schema. Additive; older banks still validate.
+
 ### noise_bank_run_record
 
 - **1.1** — egm-contracts v0.5.0. Added the optional `bank_id`
   stable-artifact identifier for the noise bank (the design puts the
   noise bank's stable ID on this sidecar rather than the HDF5).
-  Cross-artifact linkage wave.
+  Cross-artifact linkage wave. *(Superseded by `noise_bank` 1.1 above,
+  v0.6.0 — the id now lives on both; this field stays.)*
 
 ### synthetic_bank
 

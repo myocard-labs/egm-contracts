@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, RootModel
 
 
 class SchemaVersion(Enum):
@@ -13,7 +13,7 @@ class SchemaVersion(Enum):
     Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions.
     """
 
-    field_1_0 = "1.0"
+    field_1_1 = "1.1"
 
 
 class Traces(BaseModel):
@@ -38,9 +38,30 @@ class Traces(BaseModel):
     """
 
 
+class FigureId(RootModel[str]):
+    root: str = Field(..., pattern="^fig_[A-Za-z0-9_\\-]+$")
+    """
+    Figure identifier. Slug-based (hyphens allowed, no date suffix), so it does NOT match the dated ArtifactId pattern. e.g. fig_feature_distributions_synth_vs_iafdb.
+    """
+
+
+class PaperId(RootModel[str]):
+    root: str = Field(..., pattern="^paper_[a-z0-9_]+$")
+    """
+    Paper identifier (e.g. paper_phase_1_5_realism). Slug-based, no date.
+    """
+
+
+class ActivationPosition(RootModel[float]):
+    root: float = Field(..., ge=0.0, le=1.0)
+    """
+    Realized position of the activation within a trace, as a fraction of the trace: 0.0 = first sample, 1.0 = last sample. Rate- and length-independent by construction; convert at point of use with idx = round(frac * (T - 1)). This is the position the activation-aware splitter/crop ACTUALLY produced (the anchor it placed), not a value measured from the waveform afterwards - a consumer that wants the measured dV/dt-max position computes it with egm-features instead. Stored per trace by both corpora (iafdb_bank via IAF1, synthetic_bank via SEP2) so the synthetic-vs-IAFDB position distributions are compared stored-vs-stored rather than one stored against one recomputed. Defined once here and $ref'd by both banks so the two cannot drift. OPTIONAL-IN-SCHEMA / REQUIRED-ON-WRITE in activation mode, and PERMANENTLY so - the field is meaningful only for single-activation traces. It is absent whenever no single anchor exists: sliding-window extraction (no activation anchor at all), multi-beat traces (several activations, so no one position describes the trace), and any bank written before its producer's splitter shipped. Consumers MUST treat absence as 'unknown position' - never as 0.0, which is a legitimate value meaning the activation sits on the first sample, so defaulting would fabricate a spike at the low edge of the distribution.
+    """
+
+
 class NoiseBank(BaseModel):
     """
-    Low-amplitude (quiet) bipolar EGM segments used as additive noise by the synthetic-EGM mixer. Schema version 1.0. Intentionally minimal: only the fields the mixer actually consumes are required here. Extraction provenance (calibration scheme, threshold strategy, filter band, per-trace metadata) lives in a sibling noise_bank_run_record.json file. The convention is the same as metrics.csv + run.json in egm-classifier: the two files are written together with matching name stems and the consumer that needs methods opens the sibling.
+    Low-amplitude (quiet) bipolar EGM segments used as additive noise by the synthetic-EGM mixer. Schema version 1.1. Intentionally minimal: only the fields the mixer actually consumes are required here. Extraction provenance (calibration scheme, threshold strategy, filter band, per-trace metadata) lives in a sibling noise_bank_run_record.json file. The convention is the same as metrics.csv + run.json in egm-classifier: the two files are written together with matching name stems and the consumer that needs methods opens the sibling. 1.1 (from 1.0) added the optional `bank_id` stable-artifact identifier as a root attr, so a consumer can read the bank's identity from the .h5 itself rather than having to open the sidecar.
     """
 
     model_config = ConfigDict(
@@ -53,6 +74,13 @@ class NoiseBank(BaseModel):
     created_utc: AwareDatetime
     """
     ISO-8601 UTC timestamp captured at write time.
+    """
+    bank_id: str | None = Field(
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
+    )
+    """
+    Stable artifact ID for this noise bank, e.g. 'nbank_iafdb_2026-06-15'. Optional for legacy banks written before egm-contracts v0.6.0; egm-data stamps it on every new bank (enforced at write time, not by this schema, per the cross-artifact-linkage 'optional-in-schema, required-on-write' decision). The sibling noise_bank_run_record carries the same id (added there in 1.1 / v0.5.0); when both are present they MUST agree — egm-data checks that, since JSON Schema cannot compare across two files. Added 1.1.
     """
     source: str
     """

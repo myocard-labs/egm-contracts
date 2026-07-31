@@ -87,7 +87,7 @@ Header-only; no compiled library shipped.
 
 ## Schemas
 
-The ten on-disk formats currently described (plus `common`, a shared-`$defs` file holding the stable cross-artifact id patterns — not itself a format):
+The ten on-disk formats currently described, plus three shared-`$defs` files that hold definitions used by several schemas and are not themselves formats (`common`, `simulation_config`, `generation_params`):
 
 | Schema | On-disk format | Producer | Consumer(s) |
 |---|---|---|---|
@@ -101,8 +101,11 @@ The ten on-disk formats currently described (plus `common`, a shared-`$defs` fil
 | `phase_manifest` | JSON (`manifest.json`) | `egm-studio` (curator) | `validate_manifest.py`, `egm-data` |
 | `observation` | JSON | `egm-studio` | `egm-data`, `validate_manifest.py` |
 | `figure_spec` | JSON | `egm-studio` | `egm-studio` figure-render CLI, `egm-data` |
+| `common` | *shared `$defs`* | — | every schema carrying an id or an activation position |
+| `simulation_config` | *shared `$defs`* | — | `synthetic_bank`'s `simulations/` group |
+| `generation_params` | *shared `$defs`* | — | `synthetic_bank`'s root attrs (the θ-spec) |
 
-The last three — `phase_manifest`, `observation`, `figure_spec` — are the cross-artifact-linkage formats added in v0.5.0; their files live in `intracardiac-platform/project/phases/`, but egm-contracts owns the schema + the path-based validators. The shared `common.schema.json` defines the `ArtifactId` / `FigureId` / `PaperId` patterns once and is referenced cross-file. See `intracardiac-platform/project/cross_artifact_linkage_design.md`. The **artifact-role vocabulary** pairing each id prefix with its pipeline role (`Role` + `ROLE_PREFIXES`, v0.5.2) is single-sourced in `codegen/roles.json` and codegen'd to `myocard_egm_contracts.roles` — with the `role_of(id)` classifier hand-written over it — so consumers map an id to its role one way rather than re-hardcoding prefixes.
+The last three — `phase_manifest`, `observation`, `figure_spec` — are the cross-artifact-linkage formats added in v0.5.0; their files live in `intracardiac-platform/project/phases/`, but egm-contracts owns the schema + the path-based validators. The shared `common.schema.json` defines the `ArtifactId` / `FigureId` / `PaperId` patterns and the `[0,1]` `ActivationPosition` once, referenced cross-file. `simulation_config.schema.json` and `generation_params.schema.json` (both v0.6.0) do the same for the synthetic bank's per-simulation generation config and its bank-level θ-spec — split apart because one describes a single simulation and the other a whole sweep. See `intracardiac-platform/project/cross_artifact_linkage_design.md`. The **artifact-role vocabulary** pairing each id prefix with its pipeline role (`Role` + `ROLE_PREFIXES`, v0.5.2) is single-sourced in `codegen/roles.json` and codegen'd to `myocard_egm_contracts.roles` — with the `role_of(id)` classifier hand-written over it — so consumers map an id to its role one way rather than re-hardcoding prefixes.
 
 Per-trace prediction outputs are no longer their own format — they live inside the ClassifierBank produced by the eval step (in `egm-data`). There is no aggregate-metrics format: the dedicated `hybrid_eval_metrics` schema was removed in 0.4.1 (see `docs/schemas/hybrid_eval_metrics.md`). Any evaluation scores are computed at analysis time in `egm-studio` from the ClassifierBank rather than persisted as a contract.
 

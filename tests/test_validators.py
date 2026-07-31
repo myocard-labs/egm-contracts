@@ -6,10 +6,12 @@ against them and against deliberately-malformed variants.
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
 import h5py
+import numpy as np
 
 from myocard_egm_contracts.validators import (
     validate_egm_class_model_metadata,
@@ -46,6 +48,50 @@ def test_iafdb_bank_validates_with_none_threshold(valid_iafdb_bank: Path) -> Non
     assert result.ok, result.issues
 
 
+def test_iafdb_bank_without_activation_position_validates(valid_iafdb_bank: Path) -> None:
+    """1.3 adds the column; nothing populates it until IAF1 ships in Wave 2.
+
+    This is the assertion that keeps the migration/feature wave split intact —
+    if the column ever becomes required, Wave-1 banks stop validating and the
+    splitter work gets dragged forward into the schema wave.
+    """
+    with h5py.File(valid_iafdb_bank, "r") as f:
+        assert "activation_position" not in f["traces"]
+    result = validate_iafdb_bank(valid_iafdb_bank)
+    assert result.ok, result.issues
+
+
+def test_iafdb_bank_with_activation_position_validates(valid_iafdb_bank: Path) -> None:
+    """Endpoints included: an activation may land on the first or last sample."""
+    with h5py.File(valid_iafdb_bank, "r+") as f:
+        n = f["traces"]["signal"].shape[0]
+        f["traces"].create_dataset(
+            "activation_position", data=np.linspace(0.0, 1.0, n, dtype=np.float32)
+        )
+    result = validate_iafdb_bank(valid_iafdb_bank)
+    assert result.ok, result.issues
+
+
+def test_iafdb_bank_with_out_of_range_activation_position_fails(valid_iafdb_bank: Path) -> None:
+    """A value outside [0,1] means the splitter mis-anchored, or a producer wrote
+    a sample index where a fraction belongs — the failure the bounds exist for."""
+    with h5py.File(valid_iafdb_bank, "r+") as f:
+        n = f["traces"]["signal"].shape[0]
+        f["traces"].create_dataset("activation_position", data=np.full(n, 42.0, dtype=np.float32))
+    result = validate_iafdb_bank(valid_iafdb_bank)
+    assert not result
+    assert any("activation_position" in i for i in result.issues), result.issues
+
+
+def test_iafdb_bank_with_run_record_path_validates(valid_iafdb_bank: Path) -> None:
+    """The sidecar pointer is a plain relative string; absence is legal, and is
+    covered by every other iafdb fixture since none of them set it."""
+    with h5py.File(valid_iafdb_bank, "r+") as f:
+        f.attrs["run_record_path"] = "iafdb_healthy_v1_run_record.json"
+    result = validate_iafdb_bank(valid_iafdb_bank)
+    assert result.ok, result.issues
+
+
 def test_noise_bank_validates(valid_noise_bank: Path) -> None:
     result = validate_noise_bank(valid_noise_bank)
     assert result.ok, result.issues
@@ -64,7 +110,193 @@ def test_synthetic_bank_validates(valid_synthetic_bank: Path) -> None:
     assert result.ok, result.issues
 
 
+# ---------------------------------------------------------------------------
+# synthetic_bank 2.0 — the restructured layout
+# ---------------------------------------------------------------------------
+
+
+def test_synthetic_bank_rejects_a_1_1_shaped_bank(valid_synthetic_bank: Path) -> None:
+    """2.0 moved fields rather than adding them, so a 1.1 bank must be REFUSED
+    rather than partially read.
+
+    A reader that limped along on the old shape would silently lose the
+    generation config — the thing the restructure exists to preserve. There is
+    no migration path by design (no released work depends on a 1.1 bank), so
+    this rejection is the whole back-compat story.
+    """
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        del f["simulations"]
+        del f["traces"]["label"]
+        g = f["traces"]
+        n = g["signal"].shape[0]
+        g.create_dataset("fibrosis_density", data=np.full(n, 0.3, dtype=np.float64))
+        g.create_dataset(
+            "stim_edge",
+            data=np.array(["top"] * n, dtype=object),
+            dtype=h5py.string_dtype(encoding="utf-8"),
+        )
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("simulations" in i or "fibrosis_density" in i for i in result.issues), result.issues
+
+
+def test_synthetic_bank_rejects_an_orphan_simulation_id(valid_synthetic_bank: Path) -> None:
+    """The trace → simulation foreign key is what holds 2.0 together, and JSON
+    Schema cannot express a reference between two sibling groups — so the
+    validator checks it directly. An orphan is a trace whose generation config
+    can't be recovered, which is exactly the failure the restructure prevents.
+    """
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        ids = f["traces"]["simulation_id"][...]
+        ids[-1] = 99
+        f["traces"]["simulation_id"][...] = ids
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("99" in i and "simulation_id" in i for i in result.issues), result.issues
+
+
+def test_synthetic_bank_rejects_a_bad_config_object(valid_synthetic_bank: Path) -> None:
+    """Each per-sim column is an opaque JSON string on disk; decoding and
+    validating it against its typed $ref is the only thing standing between a
+    malformed config and a bank that looks fine until someone reads it."""
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        del f["simulations"]["activation_json"]
+        f["simulations"].create_dataset(
+            "activation_json",
+            data=np.array([json.dumps({"type": "stim_edge", "edge": "top"})] * 2, dtype=object),
+            dtype=h5py.string_dtype(encoding="utf-8"),
+        )
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("activation" in i for i in result.issues), result.issues
+
+
+def test_synthetic_bank_rejects_malformed_json_in_a_config_column(
+    valid_synthetic_bank: Path,
+) -> None:
+    """A truncated write shouldn't crash the reader. The row stays a string and
+    the validator reports a type error against the column, which localizes the
+    problem better than a JSONDecodeError from inside the loader."""
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        del f["simulations"]["geometry_json"]
+        f["simulations"].create_dataset(
+            "geometry_json",
+            data=np.array(['{"type": "patch_2d", "size_mm"'] * 2, dtype=object),
+            dtype=h5py.string_dtype(encoding="utf-8"),
+        )
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("geometry" in i for i in result.issues), result.issues
+
+
+def test_synthetic_bank_rejects_a_float_label(valid_synthetic_bank: Path) -> None:
+    """The label is an int by contract — that is what keeps the classifier's
+    input stable across binary, multiclass and any future label family. A float
+    label means a producer wrote the density it was derived from, the 1.1
+    conflation this restructure removed."""
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        n = f["traces"]["label"].shape[0]
+        del f["traces"]["label"]
+        f["traces"].create_dataset("label", data=np.full(n, 0.35, dtype=np.float64))
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("label" in i for i in result.issues), result.issues
+
+
+def test_synthetic_bank_without_activation_position_validates(
+    valid_synthetic_bank: Path,
+) -> None:
+    """Wave-1 banks have no controlled crop, so the column is absent — the
+    synthetic half of the same wave-boundary assertion iafdb_bank carries."""
+    with h5py.File(valid_synthetic_bank, "r") as f:
+        assert "activation_position" not in f["traces"]
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert result.ok, result.issues
+
+
+def test_synthetic_bank_with_activation_position_validates(valid_synthetic_bank: Path) -> None:
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        n = f["traces"]["signal"].shape[0]
+        f["traces"].create_dataset(
+            "activation_position", data=np.linspace(0.0, 1.0, n, dtype=np.float32)
+        )
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert result.ok, result.issues
+
+
+def test_synthetic_bank_requires_a_theta_spec(valid_synthetic_bank: Path) -> None:
+    """Even an unswept bank states its regime. Without it, a bank cannot say
+    what structural setup it represents, and a recovered parameter region is
+    only interpretable inside its regime."""
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        del f.attrs["generation_params_json"]
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("generation_params" in i for i in result.issues), result.issues
+
+
 def test_training_run_record_validates(valid_training_run_record: Path) -> None:
+    result = validate_training_run_record(valid_training_run_record)
+    assert result.ok, result.issues
+
+
+def test_run_record_without_train_metrics_validates(valid_training_run_record: Path) -> None:
+    """1.2 adds `train_metrics` optional-in-schema, and this is the assertion
+    that keeps it that way.
+
+    Wave 1 (CLF5) adopts the schema; Wave 2 (CLF2) adds the emit. If this field
+    were required, every record written in between would fail validation and
+    the emit work would be pulled into the migration wave — collapsing exactly
+    the split the wave structure exists to protect.
+    """
+    doc = json.loads(valid_training_run_record.read_text())
+    assert "train_metrics" not in doc["epochs"][0]
+    result = validate_training_run_record(valid_training_run_record)
+    assert result.ok, result.issues
+
+
+def test_run_record_with_train_metrics_validates(valid_training_run_record: Path) -> None:
+    """The populated path: the same bundle shape as val_metrics, nested
+    confusion included."""
+    doc = json.loads(valid_training_run_record.read_text())
+    doc["epochs"][0]["train_metrics"] = {
+        "auroc": 0.93,
+        "accuracy": 0.9,
+        "precision": 0.91,
+        "recall": 0.88,
+        "f1": 0.89,
+        "ece": 0.04,
+        "confusion": {"tp": 45, "fp": 5, "tn": 40, "fn": 10},
+    }
+    valid_training_run_record.write_text(json.dumps(doc))
+    result = validate_training_run_record(valid_training_run_record)
+    assert result.ok, result.issues
+
+
+def test_held_out_test_accepts_the_val_metrics_bundle(valid_training_run_record: Path) -> None:
+    """B18 parity, stated as the case that used to fail.
+
+    Before 1.2, HeldOutTest.metrics admitted only flat scalars, so a producer
+    writing the *same* bundle it writes per-epoch — which carries a nested
+    `confusion` — had its test block rejected while its epochs passed. Feeding
+    the val bundle straight into the test block is therefore the sharpest test
+    of the alignment.
+    """
+    doc = json.loads(valid_training_run_record.read_text())
+    bundle = {
+        "auroc": 0.87,
+        "accuracy": 0.83,
+        "f1": 0.81,
+        "ece": 0.05,
+        "confusion": {"tp": 40, "fp": 8, "tn": 38, "fn": 14},
+    }
+    doc["epochs"][0]["val_metrics"] = bundle
+    doc["test"] = {
+        "loss": 0.42,
+        "metrics": bundle,
+        "reliability": doc["epochs"][0]["val_reliability"],
+    }
+    valid_training_run_record.write_text(json.dumps(doc))
     result = validate_training_run_record(valid_training_run_record)
     assert result.ok, result.issues
 
@@ -72,6 +304,99 @@ def test_training_run_record_validates(valid_training_run_record: Path) -> None:
 def test_training_metrics_csv_validates(valid_training_metrics_csv: Path) -> None:
     result = validate_training_metrics(valid_training_metrics_csv)
     assert result.ok, result.issues
+
+
+def test_training_metrics_csv_without_train_columns_validates(
+    valid_training_metrics_csv: Path,
+) -> None:
+    """The fixture predates the train_* block, which is the Wave-1 case: a CSV
+    written before the producer emits them is still valid."""
+    header = valid_training_metrics_csv.read_text().splitlines()[0]
+    assert "train_auroc" not in header
+    result = validate_training_metrics(valid_training_metrics_csv)
+    assert result.ok, result.issues
+
+
+def test_training_metrics_csv_with_train_columns_validates(tmp_path: Path) -> None:
+    """The populated path, written in the contract's own column order.
+
+    Uses csv_column_order() rather than a hand-typed header, so the test can't
+    drift from the schema — and a row of empty cells covers the nullable case
+    (a metric undefined for that epoch writes an empty cell, not a zero).
+    """
+    from myocard_egm_contracts.schema_info import csv_column_order
+
+    columns = csv_column_order("training_metrics")
+    values = {
+        "epoch": 1,
+        "lr": 0.001,
+        "train_loss": 0.5,
+        "train_auroc": 0.91,
+        "train_accuracy": 0.88,
+        "train_precision": 0.87,
+        "train_recall": 0.86,
+        "train_f1": 0.865,
+        "train_ece": 0.03,
+        "val_loss": 0.45,
+        "val_auroc": 0.85,
+        "val_accuracy": 0.8,
+        "val_precision": 0.81,
+        "val_recall": 0.78,
+        "val_f1": 0.79,
+        "val_ece": 0.05,
+        "epoch_seconds": 12.3,
+    }
+    nulled = {
+        k: ("" if k.startswith(("train_a", "train_p", "train_r", "train_f", "train_e")) else v)
+        for k, v in values.items()
+    }
+
+    path = tmp_path / "metrics.csv"
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(columns))
+        writer.writeheader()
+        writer.writerow(values)
+        writer.writerow(nulled)
+
+    result = validate_training_metrics(path)
+    assert result.ok, result.issues
+
+
+def test_training_metrics_column_order_pairs_the_blocks() -> None:
+    """The order is part of the contract (B18/CL-037): train_* sits between
+    train_loss and val_loss, not appended after the val block.
+
+    Appending would have been the smaller diff; it was rejected because the
+    reason for carrying both splits is reading their divergence, and a
+    spreadsheet only makes that obvious when the pairs are adjacent.
+    """
+    from myocard_egm_contracts.schema_info import csv_column_order, get_schema
+
+    order = csv_column_order("training_metrics")
+    train_block = [c for c in order if c.startswith("train_") and c != "train_loss"]
+    val_block = [c for c in order if c.startswith("val_") and c != "val_loss"]
+
+    assert order.index("train_loss") < order.index(train_block[0])
+    assert order.index(train_block[-1]) < order.index("val_loss")
+    assert order.index("val_loss") < order.index(val_block[0])
+    assert order[-1] == "epoch_seconds"
+    # Every declared property is in the order, and vice versa — the two drift
+    # apart silently otherwise, since nothing else compares them.
+    assert set(order) == set(get_schema("training_metrics")["properties"])
+
+
+def test_training_metrics_rejects_unknown_column(tmp_path: Path) -> None:
+    """additionalProperties:false is why the columns had to ship before the
+    producer could write them — this is that rejection, made visible."""
+    path = tmp_path / "metrics.csv"
+    path.write_text(
+        "epoch,lr,train_loss,val_loss,epoch_seconds,train_mystery\n1,0.001,0.5,0.45,1.0,0.9\n"
+    )
+    result = validate_training_metrics(path)
+    assert not result
+    assert any("train_mystery" in i or "additional" in i.lower() for i in result.issues), (
+        result.issues
+    )
 
 
 def test_egm_class_model_metadata_validates(valid_egm_class_model_metadata: Path) -> None:

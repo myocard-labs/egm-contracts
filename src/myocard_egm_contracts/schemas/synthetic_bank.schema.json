@@ -2,13 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/myocard-labs/egm-contracts/schemas/synthetic_bank.schema.json",
   "title": "SyntheticBank",
-  "description": "Synthetic intracardiac EGM bank (may include real-noise conditioning at the signal level). Schema version 1.1. Maps to an HDF5 file with bank-level root attrs plus a `traces/` group containing per-trace columns. 1.1 (from 1.0) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage).",
+  "description": "Synthetic intracardiac EGM bank (may include real-noise conditioning at the signal level). Schema version 2.0. Maps to an HDF5 file with bank-level root attrs, a `simulations/` group holding one row per simulation, and a `traces/` group holding one row per bipolar trace. 2.0 is a BREAKING restructure of 1.1: generation parameters moved out of `traces/` and are now stored once per simulation as typed, polymorphic objects (see simulation_config.schema.json), the per-trace label became a plain integer with its policy and name map recorded per simulation, and `generation_params` became the bank-scoped theta-spec (see generation_params.schema.json). WHY BREAK IT: 1.1's flat per-trace columns each hard-coded a Phase-1 assumption — `fibrosis_density` presumed a uniformly-random substrate, `stim_edge` presumed a planar wave on a 2D patch, `electrode_height_mm` presumed a flat grid — so every new cell model, substrate type or stimulus protocol forced either new trace columns or a silent change of meaning in existing ones. It also repeated per trace what is constant per simulation. NO BACKWARD COMPATIBILITY: 1.1 banks are not readable by a 2.0 reader and there is no migration path. That is deliberate and cheap right now — no released work depends on a 1.1 bank, and the banks are regenerated from config in hours. The same decision after publication would not be available.",
   "type": "object",
   "properties": {
     "schema_version": {
       "type": "string",
-      "enum": ["1.1"],
-      "description": "Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions."
+      "enum": ["2.0"],
+      "description": "Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions — and a 1.x bank must be refused rather than partially read, since 2.0 moved fields rather than adding them."
     },
     "created_utc": {
       "type": "string",
@@ -17,152 +17,166 @@
     },
     "bank_id": {
       "$ref": "common.schema.json#/$defs/ArtifactId",
-      "description": "Stable artifact ID for this bank, e.g. 'tbank_synthetic_courtemanche_v1_5_2026-06-25'. Optional for legacy banks written before egm-contracts v0.5.0; egm-data stamps it on every new bank (enforced at write time, not by this schema, per the cross-artifact-linkage 'optional-in-schema, required-on-write' decision). Added 1.1."
+      "description": "Stable artifact ID for this bank, e.g. 'tbank_synthetic_courtemanche_v1_5_2026-06-25'. Optional in-schema; egm-data stamps it on every new bank (the 'optional-in-schema, required-on-write' convention shared by the other banks)."
     },
     "description": {
       "type": "string",
-      "description": "Free-text human-readable description of this bank's intent (e.g., 'hybrid_v1 — 100 sims, 20 traces/sim, SNR 10-25 dB')."
+      "description": "Free-text human-readable description of this bank's intent (e.g. '100 sims, 20 traces/sim, SNR 10-25 dB')."
     },
     "fs_hz": {
       "type": "number",
       "exclusiveMinimum": 0,
-      "description": "Sampling rate in Hz. Phase 1 is 1000.0 to match IAFDB."
+      "description": "Sampling rate in Hz of the stored traces. Phase 1 is 1000.0 to match IAFDB; the synthetic and real corpora must share a rate for lag-based features to be comparable at all."
     },
     "trace_duration_ms": {
       "type": "number",
       "exclusiveMinimum": 0,
-      "description": "Per-trace duration in milliseconds."
-    },
-    "simulator": {
-      "type": "string",
-      "default": "finitewave",
-      "description": "Simulator backend identifier. Phase 1 = 'finitewave'."
-    },
-    "cell_model": {
-      "type": "string",
-      "default": "aliev_panfilov",
-      "description": "Cellular electrophysiology model. Phase 1 = 'aliev_panfilov'."
-    },
-    "patch_size_mm": {
-      "type": "number",
-      "minimum": 0,
-      "description": "Tissue patch side length in mm (square patch). Phase 1 = 40 mm."
-    },
-    "patch_dr_mm": {
-      "type": "number",
-      "exclusiveMinimum": 0,
-      "description": "Spatial discretization step in mm. Phase 1 = 0.25 mm."
-    },
-    "ap_time_unit_ms": {
-      "type": "number",
-      "minimum": 0,
-      "description": "Mapping from simulator's non-dimensional time to ms (Aliev-Panfilov-specific; 0 for fully dimensional simulators)."
-    },
-    "fibrosis_strategy_name": {
-      "type": "string",
-      "description": "Identifier for the fibrosis substrate generation strategy. Phase 1 = 'uniform_random'."
-    },
-    "fibrosis_params": {
-      "type": "object",
-      "description": "Parameters of the fibrosis strategy. Stored on HDF5 as a JSON-encoded string attr (`fibrosis_params_json`) since HDF5 attrs are flat. Schema models the decoded structure.",
-      "additionalProperties": true
-    },
-    "electrode_config": {
-      "type": "object",
-      "description": "Electrode grid configuration (grid shape, spacing, height range). Stored on HDF5 as JSON in `electrode_config_json`.",
-      "additionalProperties": true
-    },
-    "mixer_config": {
-      "type": "object",
-      "description": "Noise mixer configuration (target SNR range, band, on/off knob). Stored on HDF5 as JSON in `mixer_config_json`.",
-      "additionalProperties": true
-    },
-    "experiment_config": {
-      "type": "object",
-      "description": "Top-level experiment knobs that drove this bank's generation. Stored on HDF5 as JSON in `experiment_config_json`.",
-      "additionalProperties": true
+      "description": "Per-trace duration in milliseconds. Coupled across the pipeline: the same value drives the simulator's capture window, the IAFDB splitter, and the classifier's input length."
     },
     "noise_bank_source": {
       "type": "string",
-      "description": "Identifier of the IAFDB noise bank consumed by the mixer (e.g., 'iafdb_noise_v1.h5')."
+      "description": "Identifier of the noise bank consumed by the mixer (e.g. 'nbank_iafdb_2026-06-15'). Empty or absent when the bank is clean (mixer off)."
+    },
+    "generation_params": {
+      "$ref": "generation_params.schema.json#/$defs/GenerationParams",
+      "description": "The bank-scoped theta-spec: which knobs this bank's sweep varied and within which structural regime. Required, and meaningful even for an unswept bank — a fixed-parameter bank records its regime with an empty knob list, which states 'nothing varied' rather than leaving it unknown. Stored JSON-encoded in the `generation_params_json` root attr."
+    },
+    "simulations": {
+      "type": "object",
+      "description": "Per-simulation columns. Maps to the HDF5 `simulations/` group. All columns have first dimension M (the simulation count) and are aligned. This group is the heart of the 2.0 restructure: a simulation has exactly one geometry, substrate, activation, cell model, electrode placement and label policy, shared by every trace it produced, so they are stored once here and referenced by `traces/simulation_id` rather than repeated per trace. Each `*_json` column holds one JSON-encoded typed object per row; the schema below describes the DECODED form.",
+      "properties": {
+        "simulation_id": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "(M,) int64 — the simulation's identifier, unique within the bank. This is the join key: traces reference it, and it is also the key egm-data uses to pair a ClassifierBank trace back to its generation config.",
+          "x-hdf5-dataset": { "name": "simulations/simulation_id", "dtype": "int64", "rank": 1 }
+        },
+        "seed": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "description": "(M,) int64 — RNG seed for this simulation. Per simulation, not per trace: one seed drove the substrate draw and the electrode-height sample for the whole simulation, so recording it per trace (as 1.1 did) repeated one number N times and invited the reading that traces differ by seed.",
+          "x-hdf5-dataset": { "name": "simulations/seed", "dtype": "int64", "rank": 1 }
+        },
+        "geometry": {
+          "type": "array",
+          "items": { "$ref": "simulation_config.schema.json#/$defs/Geometry" },
+          "description": "(M,) UTF-8 JSON — the tissue domain per simulation.",
+          "x-hdf5-dataset": { "name": "simulations/geometry_json", "dtype": "utf-8", "rank": 1, "json_encoded": true }
+        },
+        "cell_model": {
+          "type": "array",
+          "items": { "$ref": "simulation_config.schema.json#/$defs/CellModel" },
+          "description": "(M,) UTF-8 JSON — the cellular electrophysiology model per simulation. Was a bank-level `cell_model` string in 1.1, which could not carry the model's parameters at all.",
+          "x-hdf5-dataset": { "name": "simulations/cell_model_json", "dtype": "utf-8", "rank": 1, "json_encoded": true }
+        },
+        "substrate": {
+          "type": "array",
+          "items": { "$ref": "simulation_config.schema.json#/$defs/Substrate" },
+          "description": "(M,) UTF-8 JSON — the REQUESTED substrate pattern per simulation. Replaces 1.1's per-trace `fibrosis_density` scalar, which could describe only a uniform-random draw.",
+          "x-hdf5-dataset": { "name": "simulations/substrate_json", "dtype": "utf-8", "rank": 1, "json_encoded": true }
+        },
+        "substrate_summary": {
+          "type": "array",
+          "items": { "$ref": "simulation_config.schema.json#/$defs/SubstrateSummary" },
+          "description": "(M,) UTF-8 JSON — what the substrate draw actually REALIZED, e.g. the realized fibrotic fraction. Replaces 1.1's per-trace `fibrosis_density_realized`. Kept separate from the requested parameters because the two genuinely differ (grid discretization) and the label is computed from this one.",
+          "x-hdf5-dataset": { "name": "simulations/substrate_summary_json", "dtype": "utf-8", "rank": 1, "json_encoded": true }
+        },
+        "activation": {
+          "type": "array",
+          "items": { "$ref": "simulation_config.schema.json#/$defs/Activation" },
+          "description": "(M,) UTF-8 JSON — how the wave was initiated. Replaces 1.1's per-trace `stim_edge` enum, which could name only one of four edges of a 2D patch.",
+          "x-hdf5-dataset": { "name": "simulations/activation_json", "dtype": "utf-8", "rank": 1, "json_encoded": true }
+        },
+        "electrodes": {
+          "type": "array",
+          "items": { "$ref": "simulation_config.schema.json#/$defs/Electrodes" },
+          "description": "(M,) UTF-8 JSON — electrode placement plus the realized per-pair list. Absorbs 1.1's per-trace `electrode_row` and `electrode_height_mm`: a trace now carries `pair_index` into this object's `pairs` list instead.",
+          "x-hdf5-dataset": { "name": "simulations/electrodes_json", "dtype": "utf-8", "rank": 1, "json_encoded": true }
+        },
+        "backend": {
+          "type": "array",
+          "items": { "$ref": "simulation_config.schema.json#/$defs/Backend" },
+          "description": "(M,) UTF-8 JSON — the simulator and its capture knobs. Was a bank-level `simulator` string in 1.1.",
+          "x-hdf5-dataset": { "name": "simulations/backend_json", "dtype": "utf-8", "rank": 1, "json_encoded": true }
+        },
+        "label_policy": {
+          "type": "array",
+          "items": { "$ref": "simulation_config.schema.json#/$defs/LabelPolicy" },
+          "description": "(M,) UTF-8 JSON — the rule that turned this simulation's realized substrate into the integer labels its traces carry. Per simulation, so a bank may in principle mix policies; a consumer that cares must check rather than assume.",
+          "x-hdf5-dataset": { "name": "simulations/label_policy_json", "dtype": "utf-8", "rank": 1, "json_encoded": true }
+        },
+        "label_names": {
+          "type": "array",
+          "items": { "$ref": "simulation_config.schema.json#/$defs/LabelNames" },
+          "description": "(M,) UTF-8 JSON — {int: name} map giving each label value its meaning. Without it the `label` column is an unexplained integer, and its meaning has already changed once (a density scalar became a binary class) and changes again at multiclass severity.",
+          "x-hdf5-dataset": { "name": "simulations/label_names_json", "dtype": "utf-8", "rank": 1, "json_encoded": true }
+        }
+      },
+      "required": [
+        "simulation_id",
+        "seed",
+        "geometry",
+        "cell_model",
+        "substrate",
+        "substrate_summary",
+        "activation",
+        "electrodes",
+        "backend",
+        "label_policy",
+        "label_names"
+      ],
+      "additionalProperties": false
     },
     "traces": {
       "type": "object",
-      "description": "Per-trace columns. Maps to the HDF5 `traces/` group. All columns have first dimension N (the trace count) and are aligned.",
+      "description": "Per-trace columns — one row per bipolar electrode pair per simulation. Maps to the HDF5 `traces/` group. All columns have first dimension N and are aligned. After the 2.0 restructure a trace carries only its identity, its signal, its label, and its own noise provenance: everything describing HOW it was generated is reached through `simulation_id`, and everything about WHERE its electrodes sat is reached through `pair_index`.",
       "properties": {
         "signal": {
           "type": "array",
           "description": "(N, T) float32 — the bipolar EGM waveforms.",
-          "items": {
-            "type": "array",
-            "items": { "type": "number" }
-          },
+          "items": { "type": "array", "items": { "type": "number" } },
           "x-hdf5-dataset": { "name": "traces/signal", "dtype": "float32", "rank": 2, "compression": "gzip" }
         },
         "simulation_id": {
           "type": "array",
           "items": { "type": "integer" },
-          "description": "(N,) int64 — patient/simulation index (the patient-aware split unit).",
+          "description": "(N,) int64 — foreign key into `simulations/simulation_id`. Also the patient-aware split unit: traces from one simulation share a substrate, so splitting across them would leak. Every value MUST appear in the simulations group — an orphan is a bank whose provenance cannot be resolved, and egm-data checks it since JSON Schema cannot express a cross-group reference.",
           "x-hdf5-dataset": { "name": "traces/simulation_id", "dtype": "int64", "rank": 1 }
         },
         "pair_index": {
           "type": "array",
-          "items": { "type": "integer" },
-          "description": "(N,) int64 — index of the bipolar electrode pair within the grid (0..n_pairs).",
+          "items": { "type": "integer", "minimum": 0 },
+          "description": "(N,) int64 — foreign key into this simulation's `electrodes.pairs` list, identifying which bipolar pair produced the trace. Resolves to the pair's row, height and midpoint, which 1.1 repeated per trace.",
           "x-hdf5-dataset": { "name": "traces/pair_index", "dtype": "int64", "rank": 1 }
         },
-        "electrode_row": {
+        "label": {
           "type": "array",
-          "items": { "type": "integer" },
-          "description": "(N,) int64 — row index within the 5x5 grid this pair belongs to.",
-          "x-hdf5-dataset": { "name": "traces/electrode_row", "dtype": "int64", "rank": 1 }
+          "items": { "type": "integer", "minimum": 0 },
+          "description": "(N,) int64 — the trace's class label. A plain integer by design: the polymorphism lives entirely in the producer-side policy, so the classifier's input contract is an int today, at multiclass severity, and under any future label family. Its meaning comes from the simulation's `label_names`. Replaces 1.1's `fibrosis_density` / `fibrosis_density_realized` float columns, which conflated the label with the parameter that produced it.",
+          "x-hdf5-dataset": { "name": "traces/label", "dtype": "int64", "rank": 1 }
         },
-        "fibrosis_density": {
+        "activation_position": {
           "type": "array",
-          "items": { "type": "number" },
-          "description": "(N,) float64 — requested fibrosis density (continuous label, 0.0 == healthy).",
-          "x-hdf5-dataset": { "name": "traces/fibrosis_density", "dtype": "float64", "rank": 1 }
-        },
-        "fibrosis_density_realized": {
-          "type": "array",
-          "items": { "type": "number" },
-          "description": "(N,) float64 — actual fraction of non-conductive nodes after the substrate draw (differs from requested due to grid-size discretization).",
-          "x-hdf5-dataset": { "name": "traces/fibrosis_density_realized", "dtype": "float64", "rank": 1 }
-        },
-        "electrode_height_mm": {
-          "type": "array",
-          "items": { "type": "number" },
-          "description": "(N,) float64 — height of this electrode pair above the tissue surface, in mm. Sampled uniformly per simulation from [0.2, 1.0] mm in Phase 1.",
-          "x-hdf5-dataset": { "name": "traces/electrode_height_mm", "dtype": "float64", "rank": 1 }
-        },
-        "seed": {
-          "type": "array",
-          "items": { "type": "integer" },
-          "description": "(N,) int64 — RNG seed used for this simulation (reproducibility).",
-          "x-hdf5-dataset": { "name": "traces/seed", "dtype": "int64", "rank": 1 }
+          "items": { "$ref": "common.schema.json#/$defs/ActivationPosition" },
+          "description": "(N,) float32 — realized activation position within the trace as a [0,1] fraction, written by the controlled-position crop. OPTIONAL, permanently: absent when no controlled crop was applied (which is every bank the Phase-1.5 Wave-1 migration writes — SEP2 populates it in Wave 2) and absent for multi-beat traces, where no single position describes the trace. Shares its definition with iafdb_bank's identical column so the synthetic and real position distributions are compared stored-vs-stored. Absence means 'unknown', never 0.0.",
+          "x-hdf5-dataset": { "name": "traces/activation_position", "dtype": "float32", "rank": 1 }
         },
         "snr_db": {
           "type": "array",
           "items": { "type": "number" },
-          "description": "(N,) float64 — target signal-to-noise ratio at which IAFDB noise was mixed in. NaN when mixer was off.",
+          "description": "(N,) float64 — target signal-to-noise ratio at which noise was mixed into this trace. NaN when the mixer was off. Per trace rather than per simulation because the mixer draws an SNR per trace.",
           "x-hdf5-dataset": { "name": "traces/snr_db", "dtype": "float64", "rank": 1 }
-        },
-        "stim_edge": {
-          "type": "array",
-          "items": { "type": "string", "enum": ["top", "bottom", "left", "right"] },
-          "description": "(N,) UTF-8 — stimulation edge for the planar wave that produced this trace. Phase 1 only models planar-wave stim from a tissue edge; Phase 2 introduces point-source / S1-S2 protocols that will need a richer 'stimulation' object (type discriminator + protocol-specific params). When that schema version lands, this field is replaced (not extended); see project/known_issues.md for the migration plan.",
-          "x-hdf5-dataset": { "name": "traces/stim_edge", "dtype": "utf-8", "rank": 1 }
         },
         "noise_record": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "(N,) UTF-8 — IAFDB record name that supplied the noise segment ('' when mixer was off).",
+          "description": "(N,) UTF-8 — source record that supplied this trace's noise segment ('' when the mixer was off).",
           "x-hdf5-dataset": { "name": "traces/noise_record", "dtype": "utf-8", "rank": 1 }
         },
         "noise_channel": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "(N,) UTF-8 — IAFDB channel name that supplied the noise segment ('' when mixer was off).",
+          "description": "(N,) UTF-8 — source channel that supplied this trace's noise segment ('' when the mixer was off).",
           "x-hdf5-dataset": { "name": "traces/noise_channel", "dtype": "utf-8", "rank": 1 }
         }
       },
@@ -170,13 +184,8 @@
         "signal",
         "simulation_id",
         "pair_index",
-        "electrode_row",
-        "fibrosis_density",
-        "fibrosis_density_realized",
-        "electrode_height_mm",
-        "seed",
+        "label",
         "snr_db",
-        "stim_edge",
         "noise_record",
         "noise_channel"
       ],
@@ -188,24 +197,20 @@
     "created_utc",
     "fs_hz",
     "trace_duration_ms",
-    "simulator",
-    "cell_model",
-    "fibrosis_strategy_name",
+    "generation_params",
+    "simulations",
     "traces"
   ],
   "additionalProperties": false,
   "x-hdf5-mapping": {
     "root_attrs": [
-      "schema_version", "created_utc", "bank_id", "description", "fs_hz", "trace_duration_ms",
-      "simulator", "cell_model", "patch_size_mm", "patch_dr_mm", "ap_time_unit_ms",
-      "fibrosis_strategy_name", "noise_bank_source"
+      "schema_version", "created_utc", "bank_id", "description", "fs_hz",
+      "trace_duration_ms", "noise_bank_source"
     ],
     "root_attrs_json_encoded": [
-      { "schema_key": "fibrosis_params", "hdf5_attr": "fibrosis_params_json" },
-      { "schema_key": "electrode_config", "hdf5_attr": "electrode_config_json" },
-      { "schema_key": "mixer_config", "hdf5_attr": "mixer_config_json" },
-      { "schema_key": "experiment_config", "hdf5_attr": "experiment_config_json" }
+      { "schema_key": "generation_params", "hdf5_attr": "generation_params_json" }
     ],
+    "simulations_group": "simulations",
     "traces_group": "traces"
   }
 }

@@ -43,10 +43,11 @@ class UsageTag(Enum):
 
 class ArtifactId(RootModel[str]):
     root: str = Field(
-        ..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The role prefix MUST be one of the known artifact roles (tbank_ / ptbank_ / lpred_ / upred_ / nbank_ / run_ / model_ / obs_) — the vocabulary is single-sourced in codegen/roles.json, and tests/test_roles.py asserts this pattern's alternation matches it (fig_ and paper_ are excluded here: figures and papers carry FigureId / PaperId, which are not ArtifactIds). Prefixes encode the artifact's role in the ML pipeline, not its data origin. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
 
 
@@ -54,6 +55,13 @@ class FigureId(RootModel[str]):
     root: str = Field(..., pattern="^fig_[A-Za-z0-9_\\-]+$")
     """
     Figure identifier. Slug-based (hyphens allowed, no date suffix), so it does NOT match the dated ArtifactId pattern. e.g. fig_feature_distributions_synth_vs_iafdb.
+    """
+
+
+class ActivationPosition(RootModel[float]):
+    root: float = Field(..., ge=0.0, le=1.0)
+    """
+    Realized position of the activation within a trace, as a fraction of the trace: 0.0 = first sample, 1.0 = last sample. Rate- and length-independent by construction; convert at point of use with idx = round(frac * (T - 1)). This is the position the activation-aware splitter/crop ACTUALLY produced (the anchor it placed), not a value measured from the waveform afterwards - a consumer that wants the measured dV/dt-max position computes it with egm-features instead. Stored per trace by both corpora (iafdb_bank via IAF1, synthetic_bank via SEP2) so the synthetic-vs-IAFDB position distributions are compared stored-vs-stored rather than one stored against one recomputed. Defined once here and $ref'd by both banks so the two cannot drift. OPTIONAL-IN-SCHEMA / REQUIRED-ON-WRITE in activation mode, and PERMANENTLY so - the field is meaningful only for single-activation traces. It is absent whenever no single anchor exists: sliding-window extraction (no activation anchor at all), multi-beat traces (several activations, so no one position describes the trace), and any bank written before its producer's splitter shipped. Consumers MUST treat absence as 'unknown position' - never as 0.0, which is a legitimate value meaning the activation sits on the first sample, so defaulting would fabricate a spike at the low edge of the distribution.
     """
 
 
@@ -65,13 +73,19 @@ class NoiseBankEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
+    id: str = Field(
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
+    )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The role prefix MUST be one of the known artifact roles (tbank_ / ptbank_ / lpred_ / upred_ / nbank_ / run_ / model_ / obs_) — the vocabulary is single-sourced in codegen/roles.json, and tests/test_roles.py asserts this pattern's alternation matches it (fig_ and paper_ are excluded here: figures and papers carry FigureId / PaperId, which are not ArtifactIds). Prefixes encode the artifact's role in the ML pipeline, not its data origin. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
-    produced_by_package: str
-    produced_by_version: str
+    """
+    Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema.
+    """
+    produced_by_package: str | None = None
+    produced_by_version: str | None = None
     download_url: AnyUrl | None = None
     """
     OPTIONAL. Filled at release time.
@@ -87,21 +101,29 @@ class TrainingRunEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
+    id: str = Field(
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
+    )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The role prefix MUST be one of the known artifact roles (tbank_ / ptbank_ / lpred_ / upred_ / nbank_ / run_ / model_ / obs_) — the vocabulary is single-sourced in codegen/roles.json, and tests/test_roles.py asserts this pattern's alternation matches it (fig_ and paper_ are excluded here: figures and papers carry FigureId / PaperId, which are not ArtifactIds). Prefixes encode the artifact's role in the ML pipeline, not its data origin. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
-    produced_by_package: str
-    produced_by_version: str
+    """
+    Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema.
+    """
+    produced_by_package: str | None = None
+    produced_by_version: str | None = None
     trained_on_bank: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Relationship: run -> training bank (future edge TRAINED_ON).
     """
     produced_model: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Relationship: run -> model (future edge PRODUCED).
@@ -117,15 +139,22 @@ class ModelEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
+    id: str = Field(
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
+    )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The role prefix MUST be one of the known artifact roles (tbank_ / ptbank_ / lpred_ / upred_ / nbank_ / run_ / model_ / obs_) — the vocabulary is single-sourced in codegen/roles.json, and tests/test_roles.py asserts this pattern's alternation matches it (fig_ and paper_ are excluded here: figures and papers carry FigureId / PaperId, which are not ArtifactIds). Prefixes encode the artifact's role in the ML pipeline, not its data origin. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
-    produced_by_package: str
-    produced_by_version: str
+    """
+    Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema.
+    """
+    produced_by_package: str | None = None
+    produced_by_version: str | None = None
     trained_from_run: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Relationship: model -> run (future edge TRAINED_FROM, inverse of PRODUCED).
@@ -145,13 +174,19 @@ class ObservationEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
+    id: str = Field(
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
+    )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The role prefix MUST be one of the known artifact roles (tbank_ / ptbank_ / lpred_ / upred_ / nbank_ / run_ / model_ / obs_) — the vocabulary is single-sourced in codegen/roles.json, and tests/test_roles.py asserts this pattern's alternation matches it (fig_ and paper_ are excluded here: figures and papers carry FigureId / PaperId, which are not ArtifactIds). Prefixes encode the artifact's role in the ML pipeline, not its data origin. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
-    produced_by_package: str
-    produced_by_version: str
+    """
+    Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema.
+    """
+    produced_by_package: str | None = None
+    produced_by_version: str | None = None
     usage_tag: UsageTag | None = None
     """
     OPTIONAL day-to-day; REQUIRED at release-gate. For observations, 'informed_paper' marks one that informed a paper claim.
@@ -172,8 +207,11 @@ class FigureEntry(BaseModel):
     Figure identifier. Slug-based (hyphens allowed, no date suffix), so it does NOT match the dated ArtifactId pattern. e.g. fig_feature_distributions_synth_vs_iafdb.
     """
     path: str
-    produced_by_package: str
-    produced_by_version: str
+    """
+    Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema.
+    """
+    produced_by_package: str | None = None
+    produced_by_version: str | None = None
     consumes_banks: list[ArtifactId] | None = None
     """
     Relationship: figure -> banks it visualizes (future edge VISUALIZES). May reference egm_banks and/or noise_banks.
@@ -206,8 +244,11 @@ class PaperEntry(BaseModel):
     Paper identifier (e.g. paper_phase_1_5_realism). Slug-based, no date.
     """
     path: str
-    produced_by_package: str
-    produced_by_version: str
+    """
+    Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema.
+    """
+    produced_by_package: str | None = None
+    produced_by_version: str | None = None
     """
     The paper repo isn't version-tagged like the libraries; 'latest' is acceptable.
     """
@@ -226,30 +267,35 @@ class EgmBankEntry(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    id: str = Field(..., pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$")
+    id: str = Field(
+        ...,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
+    )
     """
-    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. Role prefixes (tbank_ / lpred_ / upred_ / ptbank_ / nbank_ / run_ / model_ / obs_) encode the artifact's role in the ML pipeline, not its data origin. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
+    Stable cross-artifact identifier: <role_prefix>_<descriptive_name>[_<YYYY-MM-DD>][_vN]. The role prefix MUST be one of the known artifact roles (tbank_ / ptbank_ / lpred_ / upred_ / nbank_ / run_ / model_ / obs_) — the vocabulary is single-sourced in codegen/roles.json, and tests/test_roles.py asserts this pattern's alternation matches it (fig_ and paper_ are excluded here: figures and papers carry FigureId / PaperId, which are not ArtifactIds). Prefixes encode the artifact's role in the ML pipeline, not its data origin. The date suffix is OPTIONAL: auto-derived ids stamp the creation date (YYYY-MM-DD), but a hand-set id may omit it. See intracardiac-platform/project/cross_artifact_linkage_design.md section 1.
     """
     path: str
     """
-    Path to the bank file, relative to the meta repo (or absolute).
+    Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema.
     """
-    produced_by_package: str
+    produced_by_package: str | None = None
     """
     Producer package name (e.g. synthetic-egm-pipeline).
     """
-    produced_by_version: str
+    produced_by_version: str | None = None
     """
     Producer version that wrote the artifact (e.g. v0.2.0).
     """
     model: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Prediction banks only: the model that produced the predictions (future edge EVALUATED_BY).
     """
     source_bank: str | None = Field(
-        None, pattern="^[a-z]+_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$"
+        None,
+        pattern="^(tbank|ptbank|lpred|upred|nbank|run|model|obs)_[a-z0-9_]+(_\\d{4}-\\d{2}-\\d{2})?(_v\\d+)?$",
     )
     """
     Prediction banks only: the EGM bank the predictions were computed on (future edge REFERENCES_SOURCE).
@@ -266,7 +312,7 @@ class EgmBankEntry(BaseModel):
 
 class PhaseManifest(BaseModel):
     """
-    Per-phase shallow index of every artifact that belongs to one project phase, living at intracardiac-platform/project/phases/phase_X/manifest.json. Schema version 1. Entries are POINTERS, not content: each carries only id + path + producer + relationship references (+ optional usage_tag / usage_notes / download_url). Everything else (title, description, layout, metrics, ...) lives inside the standalone file the entry points at. Banks are split by CONTENT/ROLE into two sections: `egm_banks` holds every bank of EGM traces (training tbank_, pretraining ptbank_, and prediction lpred_/upred_ banks — a prediction bank is just an EGM bank whose entry also fills `model` + `source_bank`), and `noise_banks` holds nbank_ banks of additive noise, which differ in both content and role. Relationship field names (trained_on_bank, produced_model, source_bank, consumes_banks, ...) are chosen to map 1:1 onto future provenance-graph edge types. egm-studio is the canonical curator; scripts/validate_manifest.py is the scan-and-validate safety net. Phase membership is recorded here — the artifacts it points at do not themselves declare which phase they belong to. See intracardiac-platform/project/cross_artifact_linkage_design.md sections 3 and 8.
+    Per-phase shallow index of every artifact that belongs to one project phase, living at intracardiac-platform/project/phases/phase_X/manifest.json. Schema version 1. Entries are POINTERS, not content: each carries only id + path + producer + relationship references (+ optional usage_tag / usage_notes / download_url). Everything else (title, description, layout, metrics, ...) lives inside the standalone file the entry points at. Banks are split by CONTENT/ROLE into two sections: `egm_banks` holds every bank of EGM traces (training tbank_, pretraining ptbank_, and prediction lpred_/upred_ banks — a prediction bank is just an EGM bank whose entry also fills `model` + `source_bank`), and `noise_banks` holds nbank_ banks of additive noise, which differ in both content and role. Relationship field names (trained_on_bank, produced_model, source_bank, consumes_banks, ...) are chosen to map 1:1 onto future provenance-graph edge types. egm-studio is the canonical curator; scripts/validate_manifest.py is the scan-and-validate safety net. Phase membership is recorded here — the artifacts it points at do not themselves declare which phase they belong to. Every entry requires only `id` + `path`: `produced_by_package` / `produced_by_version` are OPTIONAL (since egm-contracts v0.6.0), because the curator can legitimately index an artifact whose producer isn't knowable — hand-added files, externally-produced data, anything predating the convention — and writing 'unknown' / '0' sentinels to satisfy a required field made those cases indistinguishable from a real producer stamp. Producers still fill both; absence is the honest signal that nobody knows. See intracardiac-platform/project/cross_artifact_linkage_design.md sections 3 and 8.
     """
 
     model_config = ConfigDict(

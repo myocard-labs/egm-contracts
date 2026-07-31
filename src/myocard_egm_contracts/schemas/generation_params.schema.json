@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/generation_params.schema.json",
+  "title": "GenerationParamsSchema",
+  "description": "Shared $defs for the bank-scoped theta-spec — the record of which generation knobs a multi-simulation run swept, and over what ranges. Like common.schema.json and simulation_config.schema.json this is NOT a document format on its own: it has no document validator, and the object is stored JSON-encoded in synthetic_bank's `generation_params_json` root attr. SCOPE, and why it is separate from simulation_config: simulation_config describes ONE simulation (this geometry, this substrate density, this electrode height); this schema describes the SWEEP that produced many of them (density was varied over [0, 0.5] in logit space; height was held at 0.6). One is a per-simulation fact, the other is a per-bank fact, and conflating them is what the synthetic_bank restructure exists to stop. The link between them is TunedParam.path, an opaque dotted pointer into the per-simulation config — a string, not a $ref, so the two schemas stay independent. Design: intracardiac-platform/project/investigations/synthetic_bank_schema_design.md section 4.1.",
+  "$defs": {
+    "TunedParam": {
+      "title": "TunedParam",
+      "type": "object",
+      "description": "One knob being swept or calibrated in a parameter study. A TunedParam does not HOLD a value — it points at one that already lives in a simulation's per-function config (simulation_config), and says how that knob is being explored across the run. That indirection is the whole design: the per-simulation objects stay the single source of truth for what each simulation was, and theta is a bank-level selection over them, so adding or removing a knob is one list entry and zero schema churn.",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dotted pointer into the per-simulation config identifying the knob, e.g. 'substrate.density', 'cell_model.params.g_CaL_scale', 'electrodes.height_mm'. Also serves as the axis label in a feature-vs-theta plot. DELIBERATELY UNCONSTRAINED: no pattern, no enum, no grammar — resolving a path against a config is a resolver's job, and both the resolver and a formal path grammar are deferred out of v0.6.0 (CL-024). Constraining this later is additive; guessing the grammar now, before anything resolves one, would bake in a shape nothing has tested."
+        },
+        "bounds": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "[lo, hi] — the sweep range, and the emulator's input domain for this knob. Ascending by convention; JSON Schema cannot compare two items of one array, so lo <= hi is the producer's to enforce. Expressed in the knob's own units, NOT in transformed space: a log-transformed knob still records its natural-unit range here, so a reader doesn't have to know the transform to know what was swept."
+        },
+        "transform": {
+          "type": "string",
+          "enum": [
+            "identity",
+            "log",
+            "logit"
+          ],
+          "description": "The space the sweep and any surrogate model work in. 'log' suits a strictly-positive scale knob whose effect is multiplicative (a diffusion coefficient); 'logit' suits a knob bounded to (0,1) such as a fibrosis density, keeping samples off the boundary; 'identity' is the default for an unbounded or already-linear knob. Recorded rather than inferred because the same bounds sampled in different spaces give different designs, and a result is only reproducible if the space is known."
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "label_param",
+            "nuisance"
+          ],
+          "description": "What this knob means to the science. 'label_param' — it determines the trace's label (fibrosis density under a density policy), so it is the thing the classifier is meant to detect. 'nuisance' — it changes the signal without changing the label (electrode height, conduction velocity, SNR), so it is a realism knob the estimator calibrates and the classifier should ideally be invariant to. The distinction matters when interpreting a feature-vs-theta relationship: a feature tracking a label_param is signal, the same feature tracking a nuisance knob is a confound."
+        },
+        "nominal": {
+          "type": "number",
+          "description": "The value this knob is pinned to when it is NOT part of the active sweep. Recorded so a one-at-a-time screening design is self-describing: without it, a bank tells you which knob varied but not what the others were held at, and the two screenings are then not comparable."
+        }
+      },
+      "required": [
+        "path",
+        "bounds"
+      ],
+      "additionalProperties": false
+    },
+    "GenerationParams": {
+      "title": "GenerationParams",
+      "type": "object",
+      "description": "The theta-spec: which knobs a bank's sweep varied, and within which structural regime. BANK / SWEEP-SCOPED — one per bank, stored as the `generation_params_json` root attr of a synthetic_bank, NOT per simulation. That scope distinction is the reason this lives in its own schema rather than beside the per-simulation objects in simulation_config: those describe what ONE simulation was, this describes what a whole multi-simulation run explored. Two halves: `regime` fixes the structural choices (which cell model, which substrate type), and `knobs` lists the continuous parameters explored WITHIN that structure. The split matters because a recovered parameter region is only meaningful inside its regime — 'the realistic conduction velocity is X' is a claim about Courtemanche-on-uniform-random-fibrosis, not about atrial tissue in general. A new regime is a new theta-space by design, not a wider one. Membership of `knobs` is set per sweep by the phase's identifiability screening, which is exactly why it is a list rather than a fixed field set: which knobs are worth calibrating is an experimental result, and it will change.",
+      "properties": {
+        "regime": {
+          "type": "object",
+          "description": "The structural discriminators held fixed across the sweep, as {function: type}, e.g. {'cell_model': 'courtemanche', 'substrate': 'uniform_random_fibrosis', 'geometry': 'patch_2d'}. Keys are the generation functions (geometry / cell_model / substrate / activation / electrodes / backend / label_policy); values are the `type` discriminators of the variants used. Open rather than a closed key set: a future strategy axis (noise selection, post-processing) becomes a regime key without a schema bump, and regime is descriptive metadata rather than a validated contract surface.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "knobs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TunedParam"
+          },
+          "description": "The knobs varied in this sweep, in a stable order — an emulator's input vector is positional, so reordering this list silently reinterprets every stored design point. MAY BE EMPTY: a bank generated at one fixed parameter set has a regime but no swept knobs, which is exactly what the Phase-1.5 Wave-1 migration writes (SEP12 emits today's behavior, no sweep). An empty list is therefore a meaningful statement — 'nothing varied' — not a missing value."
+        }
+      },
+      "required": [
+        "regime",
+        "knobs"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,569 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/myocard-labs/egm-contracts/schemas/simulation_config.schema.json",
+  "title": "SimulationConfig",
+  "description": "Shared $defs describing HOW one synthetic simulation was generated, organized by the generation functions that don't change: geometry / cell_model / substrate / activation / electrodes / backend / label_policy. Like common.schema.json this is NOT a document format on its own — it has no document validator and nothing is written to disk in this shape; synthetic_bank $refs these definitions and stores one JSON-encoded object per column in its `simulations/` group. WHY IT EXISTS: synthetic_bank 1.1 recorded generation parameters as flat per-trace columns (fibrosis_density, stim_edge, electrode_height_mm), each of which silently assumed the Phase-1 setup — a uniformly-random substrate, a planar-edge stimulus on a 2D patch. Every new cell model, substrate type, or stimulus protocol forced either new trace columns or semantic drift in existing ones. Here each generation function is one type-discriminated object, so a new variant extends its function without touching the trace columns or the bank's top-level shape. Each object mirrors the corresponding strategy Protocol in synthetic-egm-pipeline's simulate/specs.py, and the `type` discriminator values match that module's Literal values exactly — the producer's dataclass and this schema are two views of one contract, so a rename in either is a coordinated change. Design: intracardiac-platform/project/investigations/synthetic_bank_schema_design.md. SCOPE: everything here describes ONE simulation. What a multi-simulation SWEEP varied — the theta-spec — is bank-scoped and lives in generation_params.schema.json, referenced from synthetic_bank's root attrs rather than its per-simulation group.",
+  "$defs": {
+    "Geometry": {
+      "title": "Geometry",
+      "description": "The tissue domain. Phase 1.5 ships the 2D patch; 3D variants (atrial mesh, cylinder) extend this union without changing anything that references it. Positions elsewhere in the config are coordinate arrays whose length follows the active variant's dimensionality — nothing downstream hard-codes 2 or 3.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Patch2DGeometry"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "type"
+      }
+    },
+    "Patch2DGeometry": {
+      "title": "Patch2DGeometry",
+      "type": "object",
+      "description": "A 2D square tissue patch with uniform fiber orientation. Mirrors specs.Patch2DGeometry.",
+      "properties": {
+        "type": {
+          "const": "patch_2d"
+        },
+        "size_mm": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Physical edge length of the square patch in mm. Phase 1 = 40."
+        },
+        "dr_mm": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Spatial discretization step in mm; mesh size per edge is round(size_mm / dr_mm). Phase 1 = 0.25."
+        },
+        "fiber_angle_rad": {
+          "type": "number",
+          "description": "Fiber orientation in radians (0 = along +x, pi/2 = along +y)."
+        },
+        "anisotropy_ratio": {
+          "type": "number",
+          "minimum": 1,
+          "description": "Conduction-velocity ratio CV_along / CV_across; 1 = isotropic. Prescriptive — the backend configures its diffusion tensor so the realized ratio matches (CV scales with sqrt(D), so D_along / D_across = anisotropy_ratio^2)."
+        }
+      },
+      "required": [
+        "type",
+        "size_mm",
+        "dr_mm"
+      ],
+      "additionalProperties": false
+    },
+    "CellModel": {
+      "title": "CellModel",
+      "description": "The cellular electrophysiology model. Phase 1.5's headline realism lever is the move from the phenomenological Aliev-Panfilov model to Courtemanche, a human-atrial ionic model — hence both variants, not just the new one: a bank generated under either must remain readable and self-describing.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/CourtemancheCellModel"
+        },
+        {
+          "$ref": "#/$defs/AlievPanfilovCellModel"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "type"
+      }
+    },
+    "CourtemancheCellModel": {
+      "title": "CourtemancheCellModel",
+      "type": "object",
+      "description": "Courtemanche-Ramirez-Nattel human atrial ionic model. Time is already physical (ms), so no model-time calibration constant is needed — unlike Aliev-Panfilov.",
+      "properties": {
+        "type": {
+          "const": "courtemanche"
+        },
+        "params": {
+          "type": "object",
+          "description": "Model parameter overrides applied on top of the backend's defaults, as {name: value} — typically ionic conductance scalings (e.g. g_CaL_scale, g_K1_scale). Deliberately open: which conductances are worth varying is an experimental question the phase's screening answers, and pinning a fixed key set here would force a schema bump every time that answer changes. The bank-scoped theta-spec (generation_params.schema.json) points INTO this object by path when a knob is being swept.",
+          "additionalProperties": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "AlievPanfilovCellModel": {
+      "title": "AlievPanfilovCellModel",
+      "type": "object",
+      "description": "Aliev-Panfilov phenomenological model — the Phase-1 baseline, kept so v1 banks stay describable and the A/B against Courtemanche is expressible.",
+      "properties": {
+        "type": {
+          "const": "aliev_panfilov"
+        },
+        "ap_time_unit_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Calibration constant mapping one model time unit to physical milliseconds. Aliev-Panfilov is non-dimensional in time, so every duration in the run is expressed through this constant; it is meaningless for ionic models, which is exactly why it lives on this variant rather than on the backend."
+        },
+        "params": {
+          "type": "object",
+          "description": "Model parameter overrides ({name: value}) on top of the backend's defaults.",
+          "additionalProperties": {
+            "type": "number"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "ap_time_unit_ms"
+      ],
+      "additionalProperties": false
+    },
+    "Substrate": {
+      "title": "Substrate",
+      "description": "The fibrosis (or other substrate) pattern. Phase 1.5 ships uniform-random; interstitial / patchy / compact / heterogeneous-mix variants extend this union. Note what this object is NOT: it holds the REQUESTED pattern parameters, while what the draw actually produced is separate (see SubstrateSummary) — the two differ through grid discretization, and conflating them was one of the flaws in the flat-column layout.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/UniformRandomFibrosis"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "type"
+      }
+    },
+    "UniformRandomFibrosis": {
+      "title": "UniformRandomFibrosis",
+      "type": "object",
+      "description": "I.i.d. nodal fibrosis: each interior mesh node is marked non-conductive with probability `density`. Matches Nezlobinsky 2021 / Okenov 2024. Mirrors specs.UniformRandomFibrosis.",
+      "properties": {
+        "type": {
+          "const": "uniform_random_fibrosis"
+        },
+        "density": {
+          "type": "number",
+          "minimum": 0,
+          "exclusiveMaximum": 1,
+          "description": "Target fibrotic-node fraction. 0.0 is exactly healthy; propagation tends to fail above ~0.6 (Nezlobinsky 2021), and Phase 1 sampled [0, 0.5]. The bound is the physical one (a fraction), not the useful one — the useful range is a producer-side sampling decision, not a contract."
+        }
+      },
+      "required": [
+        "type",
+        "density"
+      ],
+      "additionalProperties": false
+    },
+    "SubstrateSummary": {
+      "title": "SubstrateSummary",
+      "type": "object",
+      "description": "What the substrate draw actually realized, as opposed to what was requested. Separated from the Substrate object because a realized quantity is an OUTPUT of generation: the realized density differs from the requested one through grid discretization, and a variant with no scalar density at all (patchy, compact) still reports something here. Open key set — each substrate variant summarizes itself. WATCH (2026-07-30): this is one flat object shared by every substrate type, which holds while uniform-random is the only one. Once interstitial / patchy / compact land, their meaningful summaries diverge — cluster-size distribution, strand length, patch count — and a shared bag of optional keys stops describing any of them well. At that point this likely becomes a discriminated union keyed to the substrate variant, the same shape Substrate already has. Deliberately not done now: with one variant, a union of one is structure without information.",
+      "properties": {
+        "realized_density": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Fraction of mesh nodes actually marked non-conductive after the draw."
+        },
+        "n_fibrotic_nodes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of non-conductive nodes in the realized mask."
+        }
+      },
+      "additionalProperties": true
+    },
+    "Activation": {
+      "title": "Activation",
+      "description": "How the activation wave is initiated. Replaces synthetic_bank 1.1's `stim_edge` enum, which could only ever name one of four edges of a 2D patch — a point source needs a coordinate, and a paced protocol needs timings. Phase 1.5 ships planar-edge (Wave 1, today's behavior), plus point and S1-S2 (Wave 2, SEP7); a pacing train arrives in Phase 4 as another variant here.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/PlanarEdgeActivation"
+        },
+        {
+          "$ref": "#/$defs/PointActivation"
+        },
+        {
+          "$ref": "#/$defs/S1S2Activation"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "type"
+      }
+    },
+    "PlanarEdgeActivation": {
+      "title": "PlanarEdgeActivation",
+      "type": "object",
+      "description": "A thin strip of voltage applied at one or more mesh edges; the wave propagates inward. Mirrors specs.PlanarEdgeStimulus, with one deliberate difference: `edges` is a LIST where the producer's Phase-1 dataclass carries a single `edge`. Today's single-edge behavior is the one-element list, so the Wave-1 migration writes ['top'] and SEP6's multi-edge feature needs no schema change — the alternative (adding a field in Wave 2) would have put a contracts bump in the middle of the feature wave.",
+      "properties": {
+        "type": {
+          "const": "planar_edge"
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Edge"
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Which edge(s) fire. One entry reproduces Phase-1 behavior; several give the propagation-direction variety that drives morphology diversity."
+        },
+        "voltage": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Stimulus amplitude in the cell model's voltage units (not mV — the models are dimensionless or model-specific here)."
+        },
+        "time_model_units": {
+          "type": "number",
+          "description": "When the stimulus fires, in the backend's model time units."
+        },
+        "strip_thickness": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Strip thickness in mesh cells. A thicker strip is more reliable at triggering propagation on a fibrotic substrate."
+        }
+      },
+      "required": [
+        "type",
+        "edges"
+      ],
+      "additionalProperties": false
+    },
+    "PointActivation": {
+      "title": "PointActivation",
+      "type": "object",
+      "description": "A point (or small ball) stimulus at a coordinate — the variant that flat `stim_edge` could not express at all. Gives curved wavefronts and off-axis propagation.",
+      "properties": {
+        "type": {
+          "const": "point"
+        },
+        "position_mm": {
+          "$ref": "#/$defs/PositionMm",
+          "description": "Stimulus location in mm, in the geometry's coordinate frame. Length follows the active Geometry variant: [x, y] on a 2D patch, [x, y, z] on a 3D mesh."
+        },
+        "radius_mm": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Radius of the stimulated ball in mm. Omit for a single-node stimulus."
+        },
+        "voltage": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Stimulus amplitude in the cell model's voltage units."
+        },
+        "time_model_units": {
+          "type": "number",
+          "description": "When the stimulus fires, in the backend's model time units."
+        }
+      },
+      "required": [
+        "type",
+        "position_mm"
+      ],
+      "additionalProperties": false
+    },
+    "S1S2Activation": {
+      "title": "S1S2Activation",
+      "type": "object",
+      "description": "An S1-S2 protocol: a train of conditioning stimuli followed by a premature one at a coupling interval, used to probe refractoriness. The stimulus itself is a nested SingleShotActivation, so an S1-S2 can be driven from an edge or a point without this variant restating either one's fields. Its `time_model_units` is IGNORED — protocol timing comes from the intervals below — and its `voltage` applies to every stimulus in the train. PROVISIONAL: this variant exists now so SEP7 can implement it in Wave 2 without a contracts bump, but the field set is the schema author's reading of the protocol, not a producer design that has been built. Confirm against SEP7's implementation before any bank is written with it; extending it later is additive.",
+      "properties": {
+        "type": {
+          "const": "s1s2"
+        },
+        "site": {
+          "$ref": "#/$defs/SingleShotActivation",
+          "description": "The stimulus each S1 and the S2 delivers — an ordinary single-shot activation, whose own timing field is ignored in favour of the protocol's intervals."
+        },
+        "s1_interval_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Interval between successive S1 (conditioning) stimuli."
+        },
+        "s2_interval_ms": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Coupling interval between the last S1 and the premature S2 — the knob that probes refractoriness."
+        },
+        "n_s1": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of S1 stimuli delivered before the S2."
+        }
+      },
+      "required": [
+        "type",
+        "site",
+        "s1_interval_ms",
+        "s2_interval_ms"
+      ],
+      "additionalProperties": false
+    },
+    "Electrodes": {
+      "title": "Electrodes",
+      "description": "Electrode placement AND the realized per-pair detail for one simulation. This is where synthetic_bank 1.1's per-trace `electrode_row` / `electrode_height_mm` columns moved to: those values are per electrode pair, and every trace from one simulation shares the same placement, so storing them once per simulation and indexing by pair_index removes the repetition without losing anything.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/CenteredGrid2DElectrodes"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "type"
+      }
+    },
+    "CenteredGrid2DElectrodes": {
+      "title": "CenteredGrid2DElectrodes",
+      "type": "object",
+      "description": "A rows x cols grid centred on a 2D patch, with consecutive within-row electrodes forming bipolar pairs (so a 5x5 grid yields 5 * 4 = 20 pairs). Mirrors specs.CenteredGrid2D. Height is sampled per simulation, so `height_mm` here is the realized value for THIS simulation, not a configured range — the range is a producer-side sampling decision recorded in the theta-spec when it is being swept.",
+      "properties": {
+        "type": {
+          "const": "centered_grid_2d"
+        },
+        "n_rows": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Grid rows."
+        },
+        "n_cols": {
+          "type": "integer",
+          "minimum": 2,
+          "description": "Grid columns. At least 2 — a bipolar pair needs two electrodes in a row."
+        },
+        "spacing_mm": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Intra-row and inter-row electrode spacing in mm."
+        },
+        "height_mm": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Realized electrode height above the tissue surface for this simulation, in mm. A strong driver of EGM amplitude and morphology, which is why it is a candidate sweep knob."
+        },
+        "positions_mm": {
+          "type": "array",
+          "description": "(n_electrodes, D) electrode positions in mm, in the geometry's coordinate frame; D follows the active Geometry variant. Ordered row-major, so index = row * n_cols + col, which is what `pairs` indexes into.",
+          "items": {
+            "$ref": "#/$defs/PositionMm"
+          }
+        },
+        "pairs": {
+          "type": "array",
+          "description": "The realized bipolar pairs, in trace order. A trace in the bank carries a `pair_index` into this list rather than repeating any of it per trace.",
+          "items": {
+            "$ref": "#/$defs/BipolarPair"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "n_rows",
+        "n_cols",
+        "spacing_mm",
+        "height_mm",
+        "pairs"
+      ],
+      "additionalProperties": false
+    },
+    "BipolarPair": {
+      "title": "BipolarPair",
+      "type": "object",
+      "description": "One realized bipolar electrode pair. Everything a consumer previously read from the per-trace columns lives here.",
+      "properties": {
+        "pair_index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Position of this pair in the list; the value a trace stores to reference it. Explicit rather than implied by array order so a filtered or reordered view can't silently renumber pairs."
+        },
+        "electrode_indices": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "The (a, b) indices into positions_mm whose difference forms the bipolar signal."
+        },
+        "electrode_row": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Grid row this pair sits in. Was a per-trace column in 1.1."
+        },
+        "height_mm": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Height of this pair above the tissue in mm. Was a per-trace column in 1.1. Equal to the placement's height_mm for a flat grid, but kept per pair so a non-planar placement (a 3D catheter) needs no schema change."
+        },
+        "midpoint_mm": {
+          "$ref": "#/$defs/PositionMm",
+          "description": "Midpoint of the two electrodes in mm — the point a bipolar trace is usually attributed to when relating it to the substrate beneath it."
+        }
+      },
+      "required": [
+        "pair_index"
+      ],
+      "additionalProperties": false
+    },
+    "Backend": {
+      "title": "Backend",
+      "description": "The simulator that ran this simulation, plus its run-level capture knobs. Phase 1.5 ships Finitewave; openCARP / TorchCor would extend this union. Recorded because a trace's fidelity is not reproducible from the physics alone — sample rate and oversampling shape what reached the bank.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/FinitewaveBackend"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "type"
+      }
+    },
+    "FinitewaveBackend": {
+      "title": "FinitewaveBackend",
+      "type": "object",
+      "description": "The Finitewave finite-difference solver.",
+      "properties": {
+        "type": {
+          "const": "finitewave"
+        },
+        "version": {
+          "type": "string",
+          "description": "Finitewave version string that produced the simulation."
+        },
+        "output_fs_hz": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "On-disk sample rate after downsampling. Phase 1 = 1000 to match IAFDB; synthetic and real must share a rate for lag-based features to be comparable."
+        },
+        "capture_oversample": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The backend captures at capture_oversample * output_fs_hz and the runner downsamples. Recorded because it determines whether the on-disk trace is anti-aliased by oversampling margin rather than by a filter."
+        },
+        "dt_model_units": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Solver time step in the model's time units."
+        },
+        "params": {
+          "type": "object",
+          "description": "Additional backend knobs ({name: value}), e.g. diffusion. Open for the same reason the cell-model params are: which solver knobs get swept is an experimental question, and the theta-spec points into this object by path.",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "type",
+        "output_fs_hz"
+      ],
+      "additionalProperties": false
+    },
+    "LabelPolicy": {
+      "title": "LabelPolicy",
+      "description": "The rule that turned a realized substrate into the integer label a trace carries. Stored per simulation rather than per trace: the trace keeps a plain int (so the classifier's input contract never changes shape), and this object plus LabelNames is what makes that int interpretable. A new label family — fibrotic type, neighbourhood composition, multiclass severity — is a new variant here and changes nothing downstream of the label column.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/GlobalDensityLabel"
+        },
+        {
+          "$ref": "#/$defs/LocalDensityLabel"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "type"
+      }
+    },
+    "GlobalDensityLabel": {
+      "title": "GlobalDensityLabel",
+      "type": "object",
+      "description": "Labels every trace in the simulation by the WHOLE patch's realized fibrosis density against a threshold. Mirrors label_policy.GlobalDensityLabel. Note the implication, which is a known limitation rather than a bug: every trace in a simulation gets the same label regardless of where its electrode pair sat. Class names are NOT carried here — LabelNames owns them, so a bank states each class's meaning exactly once.",
+      "properties": {
+        "type": {
+          "const": "global_density"
+        },
+        "thresholds": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 1,
+          "description": "Ascending realized whole-patch density cut points. N thresholds produce N+1 classes, so a binary healthy/fibrotic policy is a single-element array and a Phase-2 severity policy is several — no new variant, no contracts bump. Class k is the band between thresholds[k-1] and thresholds[k]; class names live in LabelNames, which already maps any number of labels and is the single place a class is named."
+        }
+      },
+      "required": [
+        "type",
+        "thresholds"
+      ],
+      "additionalProperties": false
+    },
+    "LocalDensityLabel": {
+      "title": "LocalDensityLabel",
+      "type": "object",
+      "description": "Labels each trace by the realized fibrosis density within a radius of its own pair midpoint — so traces from one simulation can disagree, which is the point. Mirrors label_policy.LocalDensityLabel. Class names are NOT carried here — LabelNames owns them, so a bank states each class's meaning exactly once.",
+      "properties": {
+        "type": {
+          "const": "local_density"
+        },
+        "radius_mm": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Radius around the pair midpoint over which density is measured. Sets what 'local' means, and is worth recording because a result only reproduces at the same radius."
+        },
+        "thresholds": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "minItems": 1,
+          "description": "Ascending local density cut points. N thresholds produce N+1 classes, so a binary healthy/fibrotic policy is a single-element array and a Phase-2 severity policy is several — no new variant, no contracts bump. Class k is the band between thresholds[k-1] and thresholds[k]; class names live in LabelNames, which already maps any number of labels and is the single place a class is named."
+        }
+      },
+      "required": [
+        "type",
+        "thresholds",
+        "radius_mm"
+      ],
+      "additionalProperties": false
+    },
+    "LabelNames": {
+      "title": "LabelNames",
+      "type": "object",
+      "description": "Map from integer label to human-readable class name, e.g. {\"0\": \"healthy\", \"1\": \"fibrotic\"}. Keys are stringified integers because JSON object keys are strings. Carried alongside the policy so a bank is self-describing: without it the label column is an int with no stated meaning, and the meaning has already changed once (density scalar -> binary class) and will change again at multiclass severity.",
+      "patternProperties": {
+        "^[0-9]+$": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Edge": {
+      "title": "Edge",
+      "type": "string",
+      "enum": [
+        "top",
+        "bottom",
+        "left",
+        "right"
+      ],
+      "description": "A mesh edge, in the backend's naming convention: top = smallest axis-0 index, bottom = largest axis-0, left = smallest axis-1, right = largest axis-1. Electrode coordinates use the same axis convention. Defined once and $ref'd by every variant that names an edge, so a single-shot stimulus and a paced protocol cannot end up disagreeing about what 'top' means."
+    },
+    "PositionMm": {
+      "title": "PositionMm",
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 3,
+      "description": "A coordinate in millimetres, in the geometry's frame. Length follows the active Geometry variant: [x, y] on a 2D patch, [x, y, z] on a 3D mesh. Defined once so stimulus sites, electrode positions and pair midpoints stay dimensionally consistent with each other."
+    },
+    "SingleShotActivation": {
+      "title": "SingleShotActivation",
+      "description": "An activation that fires once — the stimulus shapes a protocol can deliver repeatedly. Exists so S1S2Activation can reference a real activation variant rather than a parallel set of 'site' objects duplicating their fields; the union excludes protocol variants, which is what stops a protocol nesting another protocol.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/PlanarEdgeActivation"
+        },
+        {
+          "$ref": "#/$defs/PointActivation"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "type"
+      }
+    }
+  }
+}
