@@ -13,6 +13,7 @@ from . import noise_bank  # noqa: F401
 from . import noise_bank_run_record  # noqa: F401
 from . import observation  # noqa: F401
 from . import phase_manifest  # noqa: F401
+from . import simulation_config  # noqa: F401
 from . import synthetic_bank  # noqa: F401
 from . import training_metrics  # noqa: F401
 from . import training_run_record  # noqa: F401
