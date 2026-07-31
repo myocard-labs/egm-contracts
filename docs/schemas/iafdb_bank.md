@@ -12,8 +12,11 @@ The on-disk layout mirrors `synthetic_bank`: bank-level HDF5 root
 attrs carry provenance + extraction parameters; a `traces/` group
 holds per-trace columns aligned along a first dimension N.
 
-Schema version: `1.2` (plain X.Y string, matching all other schemas in
-this package). `1.2` added the optional `bank_id` stable-artifact
+Schema version: `1.3` (plain X.Y string, matching all other schemas in
+this package). `1.3` added two optional fields — the `run_record_path`
+sidecar pointer and the per-trace `activation_position` (egm-contracts
+v0.6.0); both are optional, so banks written before them stay valid.
+`1.2` added the optional `bank_id` stable-artifact
 identifier (cross-artifact linkage, egm-contracts v0.5.0); the field is
 optional so older banks remain valid. `1.1` was a minor bump that added a
 `"none"` value to the `threshold_mode` enum and made `threshold_value`
@@ -41,6 +44,7 @@ Bank-level root attrs (HDF5):
 
 - `schema_version`, `created_utc`, `source`
 - `bank_id` — optional stable artifact id (since 1.2); pattern defined once in `common.schema.json`. Absent on legacy banks.
+- `run_record_path` — optional relative path to a sibling JSON run record of per-record extraction diagnostics (since 1.3), e.g. `iafdb_healthy_v1_run_record.json`. Same sibling convention as `noise_bank` ↔ `noise_bank_run_record`. Absence means "no sidecar", not an error. The record's own schema isn't formalized yet, so this is a path rather than an embedded object.
 - `fs_hz` (1000.0), `trace_duration_ms`, `window_ms`, `window_samples`, `hop_ms`
 - `calibration_method` (= "r_wave_anchoring"), `calibration_target_qrs_pp_mv`
 - `threshold_mode` ("absolute" | "percentile" | "none" since 1.1), `threshold_value` (nullable since 1.1, when `threshold_mode = "none"`)
@@ -56,6 +60,20 @@ Per-trace columns under `traces/`:
 - `start_sample` (N,) int64 — offset in source record
 - `peak_to_peak_mv` (N,) float32 — calibrated p-p amplitude that passed the threshold
 - `calibration_scalar` (N,) float32 — per-patient calibration scalar
+- `activation_position` (N,) float32 — **optional** (since 1.3); the realized
+  activation position within the window as a `[0,1]` fraction, written by the
+  activation-aware splitter. It's what the splitter *placed*, not a
+  measurement taken from the waveform afterwards — a consumer wanting the
+  measured dV/dt-max position computes that with egm-features. Optional
+  **permanently**, not just during the migration: it's absent on
+  sliding-window banks (no anchor exists), on multi-beat traces (several
+  activations, so no single position describes the trace), and on
+  activation-mode banks written before the splitter shipped. Treat absence as
+  "unknown" — never as 0.0, which is a legitimate value meaning the activation
+  sits on the first sample, so defaulting would invent a spike at the bottom
+  of the distribution.
+  `synthetic_bank` carries the identical field, which is what lets the two
+  corpora's position distributions be compared stored-vs-stored.
 
 No `label` column — labeling happens at ClassifierBank conversion time.
 

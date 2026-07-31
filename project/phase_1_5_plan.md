@@ -2,7 +2,7 @@
 
 **Repo:** egm-contracts · **Phase:** 1.5
 **Phase design doc:** `intracardiac-platform/phases/phase_1_5/design.md`
-**Status:** in progress · **Progress:** 3/13 steps done (S1 · S2 · S3)
+**Status:** in progress · **Progress:** 4/13 steps done (S1 · S2 · S3 · S4)
 **Repo estimate:** **14–29.5 h** active (Cx **15** points) — the project-lead reads this into design §6;
 this chat does not edit the design doc.
 
@@ -138,7 +138,7 @@ Every step ends green: `ruff format src tests` → `ruff check src tests` → `m
   still validates (optional-in-schema); a bad-prefix id fails (S2's tightened pattern).
 - **Depends on:** S2.
 
-### S4 — `iafdb_bank` 1.3 — `run_record_path` + `activation_position` (B11 · IAF3 / P6) ☐ (0.75–2 h)
+### S4 — `iafdb_bank` 1.3 — `run_record_path` + `activation_position` (B11 · IAF3 / P6) ✅ (0.75–2 h)
 - **Change:** add optional root `run_record_path` (string, relative sidecar pointer, mirroring the
   `noise_bank` ↔ `noise_bank_run_record` convention) + `root_attrs`. **Also add per-trace
   `activation_position`** to `traces/` — `$ref` to S2's shared `ActivationPosition` (`[0,1]`),

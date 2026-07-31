@@ -272,6 +272,24 @@ introduction version.
 
 ### iafdb_bank
 
+- **1.3** — egm-contracts v0.6.0. Two optional additions, both Phase-1.5 Wave 1:
+  - `run_record_path` root attr (B11) — relative pointer to a sibling JSON
+    run record of per-record extraction diagnostics, mirroring the
+    `noise_bank` ↔ `noise_bank_run_record` convention. The **record's own
+    schema is deliberately not formalized** (P6): the methods paper may
+    reshape it, so for 1.5 it stays documented-but-unvalidated JSON and this
+    field is a path rather than an embedded object. The attr ships **unset**
+    in Wave 1 — the `--report` generator that fills it is Wave-2 work.
+  - `traces/activation_position` (CL-052) — the realized `[0,1]` activation
+    position per window, `$ref`ing the shared `common.ActivationPosition`.
+    Column lands here in Wave 1 **unpopulated**; IAF1's splitter fills it in
+    Wave 2. Optional for two independent reasons: the sliding-window path has
+    no activation anchor at all, and requiring it would drag Wave-2 splitter
+    work into the schema wave. **Why it's worth a field:** T1 claims the
+    synthetic and real position distributions can be *matched*; without the
+    realized real distribution stored, that claim can't be checked from the
+    artifacts (STU5 would compare a measured distribution against an assumed
+    one).
 - **1.2** — egm-contracts v0.5.0. Added the optional `bank_id`
   stable-artifact identifier (HDF5 root attr). Cross-artifact
   linkage wave.

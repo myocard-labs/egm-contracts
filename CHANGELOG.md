@@ -25,6 +25,14 @@ Phase-1.5 Wave 1 — the coordinated **v0.6.0** schema bump. Accumulating; ships
   required-on-write in activation mode: Wave-1 banks are written before the splitters populate
   it.
 
+- **`iafdb_bank` 1.3 — `run_record_path` + per-trace `activation_position`.** The first is a
+  relative pointer to a sibling JSON run record of extraction diagnostics (B11), shipped unset
+  in Wave 1 — the generator that fills it is Wave-2 work, and the record's own schema stays
+  deliberately unformalized until the methods paper settles its shape. The second is the
+  realized `[0,1]` activation position per window (CL-052), `$ref`ing the shared
+  `common.ActivationPosition`; the column lands unpopulated and IAF1's splitter fills it in
+  Wave 2. Both optional, so existing banks validate unchanged.
+
 - **`noise_bank` 1.1 — root `bank_id`** (B20). Optional in-schema, stamped on write by
   egm-data. The id previously lived only on the sibling run record, so a consumer had to
   find and parse the sidecar before it could tell which bank it had opened; the bank is now
