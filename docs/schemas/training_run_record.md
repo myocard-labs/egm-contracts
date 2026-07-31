@@ -5,8 +5,12 @@
 A versioned, full-fidelity record of a single training run. Written as
 `run.json` into each training-run's checkpoint directory.
 
-Schema version: `1.1`. `1.1` added the optional stable-artifact pointer
-fields `run_id`, `trained_on_bank_id`, and `produced_model_id`
+Schema version: `1.2`. `1.2` added the optional per-epoch `train_metrics`
+bundle and brought the `test` block to parity with the per-epoch validation
+bundle (egm-contracts v0.6.0); it also dropped `host` from the well-known
+`run` keys and made config artifact paths repo-relative — both conventions
+with no structural expression. `1.1` added the optional stable-artifact
+pointer fields `run_id`, `trained_on_bank_id`, and `produced_model_id`
 (cross-artifact linkage, egm-contracts v0.5.0); all optional so older
 records remain valid.
 
@@ -25,7 +29,7 @@ unknown formats cleanly rather than silently misparsing.
 
 ### Top-level
 
-- **`schema_version`** — `"1.1"`.
+- **`schema_version`** — `"1.2"`.
 - **`created_utc`** — ISO-8601 timestamp at write time. Set at the
   end of training, not the start.
 - **`run_id`** — *optional, since 1.1.* Stable cross-artifact id of THIS
@@ -39,20 +43,35 @@ unknown formats cleanly rather than silently misparsing.
   sidecar's own `model_id`.
 - **`run`** — run-level metadata (object). Well-known keys
   (producer SHOULD write all of these): `git_sha` (repo state at training
-  start), `host`, `model_version`, `training_started_utc`,
-  `training_ended_utc`. Additional producer-defined keys allowed. (The
-  run's stable id lives in the top-level `run_id`, not here.)
+  start), `model_version`, `training_started_utc`, `training_ended_utc`.
+  Additional producer-defined keys allowed. (The run's stable id lives in
+  the top-level `run_id`, not here.) **`host` was dropped in 1.2** —
+  producers SHOULD NOT write the training machine's hostname. It never
+  answered a question anyone asked of a run record, and it was the one key
+  identifying a person's machine rather than the experiment. Legacy records
+  carrying it still validate; readers ignore it.
 - **`config`** — fully-resolved training configuration as a nested
   object. Well-known top-level keys: `model`, `data`, `training`,
   `eval`. The training bank's stable id is the top-level
   `trained_on_bank_id`, not a path inside `config.data`. Contents reflect
   the producer's config system; consumers treat unknown keys as
-  additional context.
+  additional context. **Since 1.2**, artifact paths recorded here (bank,
+  output dir, checkpoint dir) SHOULD be repo-relative: an absolute path
+  pins the record to the machine that wrote it, so a record read back after
+  a move or a directory rename points at nothing. Convention only — these
+  sit under producer-defined keys, so the producer enforces it.
 - **`epochs`** — array of `EpochRecord`, one per training epoch.
 - **`best`** — summary of the selected best epoch by the configured
   selection metric.
 - **`test`** — optional. Final test-set metrics, present iff a test
-  split was evaluated at the end of training.
+  split was evaluated. **Since 1.2** the block mirrors the per-epoch
+  validation bundle — `metrics` matches `val_metrics` (nested `confusion`
+  included) and `reliability` matches `val_reliability` — so consumers
+  render train / val / test through one code path. Before 1.2 `metrics`
+  admitted flat scalars only, which rejected the very bundle the producer
+  already wrote per epoch. The metrics are computed with the **best**
+  epoch's weights (the epoch named in `best`), not the last epoch's — the
+  last epoch describes a model nobody ships.
 
 ### EpochRecord ($defs)
 
@@ -65,6 +84,14 @@ One per epoch:
 - **`val_loss`** — mean validation-set loss across batches in this
   epoch.
 - **`epoch_seconds`** — wall-clock seconds for the epoch.
+- **`train_metrics`** — *optional, since 1.2.* The training-split
+  counterpart of `val_metrics`, same keys. Present so train-vs-val
+  divergence is readable from the record itself: with validation metrics
+  alone, an overfitting run and a genuinely-hard-task run look identical.
+  Optional in the schema, required on write once the producer emits it —
+  the schema migration lands before the emitting code, so records written
+  in between are valid without it. Train-split reliability bins are out of
+  scope (feature backlog FB-10).
 - **`val_metrics`** — object of scalar val metrics (AUROC,
   accuracy, precision, recall, F1, ECE, confusion-matrix counts).
   Non-finite values serialize as `null` so the JSON stays strictly
@@ -111,19 +138,18 @@ Skeleton of a complete run.json:
 
 ```json
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "created_utc": "2026-06-11T22:00:00Z",
   "run_id": "run_v1_baseline_2026-06-11",
   "trained_on_bank_id": "tbank_synthetic_hybrid_v1_2026-06-10",
   "produced_model_id": "model_egm_classifier_v1_baseline_2026-06-11",
   "run": {
     "git_sha": "abc1234",
-    "host": "danielk-desktop",
     "model_version": "mobilevit1d-v1"
   },
   "config": {
     "model": {"width_multiplier": 0.5, "num_classes": 1},
-    "data": {"split_ratios": [0.8, 0.1, 0.1]},
+    "data": {"bank_path": "banks/tbank_synthetic_hybrid_v1.h5", "split_ratios": [0.8, 0.1, 0.1]},
     "training": {"epochs": 60, "batch_size": 32, "optimizer": "adamw"},
     "eval": {"select_metric": "auroc", "decision_threshold": 0.5}
   },
@@ -134,6 +160,7 @@ Skeleton of a complete run.json:
       "train_loss": 0.5,
       "val_loss": 0.45,
       "epoch_seconds": 12.3,
+      "train_metrics": {"auroc": 0.88, "accuracy": 0.84},
       "val_metrics": {"auroc": 0.85, "accuracy": 0.80},
       "val_reliability": [
         {"lo": 0.0, "hi": 0.1, "count": 12, "confidence": 0.05, "accuracy": 0.08}
@@ -143,7 +170,12 @@ Skeleton of a complete run.json:
   "best": {"epoch": 42, "metric": "auroc", "value": 0.999},
   "test": {
     "loss": 0.05,
-    "metrics": {"auroc": 0.92, "accuracy": 0.91, "ece": 0.01},
+    "metrics": {
+      "auroc": 0.92,
+      "accuracy": 0.91,
+      "ece": 0.01,
+      "confusion": {"tp": 44, "fp": 4, "tn": 45, "fn": 7}
+    },
     "reliability": []
   }
 }

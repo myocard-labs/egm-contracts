@@ -2,7 +2,7 @@
 
 **Repo:** egm-contracts · **Phase:** 1.5
 **Phase design doc:** `intracardiac-platform/phases/phase_1_5/design.md`
-**Status:** in progress · **Progress:** 5/13 steps done (S1 · S2 · S3 · S4 · S5)
+**Status:** in progress · **Progress:** 6/13 steps done (S1 · S2 · S3 · S4 · S5 · S6)
 **Repo estimate:** **14–29.5 h** active (Cx **15** points) — the project-lead reads this into design §6;
 this chat does not edit the design doc.
 
@@ -176,7 +176,7 @@ Every step ends green: `ruff format src tests` → `ruff check src tests` → `m
   locally instead and records its output (see below). Justification for the reviewer: loosening a
   `required` array is backward-compatible, and `phase_manifest` is a major-only enum-of-one.
 
-### S6 — `training_run_record` 1.2 (CON3 / P1) ☐ (1.5–3 h)
+### S6 — `training_run_record` 1.2 (CON3 / P1) ✅ (1.5–3 h)
 - **Change:** add `$defs.EpochRecord.train_metrics` — object, **optional in-schema** (deliberately
   *not* in `required`), mirroring `val_metrics` (auroc / accuracy / precision / recall / f1 / ece +
   optional nested `confusion`, `additionalProperties: true`). **Optional-in-schema /

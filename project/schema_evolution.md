@@ -270,6 +270,34 @@ introduction version.
 - **1.0** — egm-contracts v0.3.0. Initial release of this schema
   (renamed from `model_metadata`).
 
+### training_run_record
+
+- **1.2** — egm-contracts v0.6.0. Phase-1.5 Wave 1; two schema changes + two
+  conventions:
+  - **`EpochRecord.train_metrics`** (CLF2) — the per-epoch training-split
+    bundle, mirroring `val_metrics` key-for-key. Makes train-vs-val divergence
+    readable from the record; with validation metrics alone an overfitting run
+    and a genuinely-hard-task run are indistinguishable. **Optional-in-schema /
+    required-on-write** and deliberately *not* in `required`: Wave 1 (CLF5)
+    adopts the schema before Wave 2 (CLF2) emits the field, so requiring it
+    would drag feature work into the migration wave.
+  - **`HeldOutTest` parity with the val bundle** (B18) — `metrics` was
+    `additionalProperties: {number|integer|null}`, i.e. flat scalars only, so a
+    producer writing the *same* bundle it writes per-epoch (which carries a
+    nested `confusion`) had its test block rejected while its epochs passed.
+    Now `additionalProperties: true`, matching `val_metrics`; `reliability`
+    documented as mirroring `val_reliability`. One render path for train / val
+    / test. Also records the **producer semantic**: test metrics come from the
+    **best** epoch's weights, not the last — the last epoch describes a model
+    nobody ships.
+  - **`host` dropped from the well-known `run` keys** (B15) — convention only;
+    the object stays `additionalProperties: true`, so legacy records carrying
+    it still validate. It never answered a question asked of a run record and
+    was the one field identifying a person's machine rather than the
+    experiment.
+  - **Config artifact paths repo-relative** (B14) — convention only; absolute
+    paths pin a record to the machine that wrote it.
+
 ### phase_manifest
 
 - **(v0.6.0, `schema_version` unchanged at `1`)** — two backward-compatible

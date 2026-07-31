@@ -25,6 +25,18 @@ Phase-1.5 Wave 1 — the coordinated **v0.6.0** schema bump. Accumulating; ships
   required-on-write in activation mode: Wave-1 banks are written before the splitters populate
   it.
 
+- **`training_run_record` 1.2 — per-epoch `train_metrics` + `HeldOutTest` parity.**
+  `EpochRecord.train_metrics` mirrors `val_metrics`, making train-vs-val divergence readable
+  from the record (with validation metrics alone, overfitting and a hard task look the same).
+  Optional-in-schema / required-on-write: the migration lands before the emit, so records
+  written in between stay valid. `HeldOutTest.metrics` moved from flat-scalars-only to
+  `additionalProperties: true`, matching `val_metrics` — it previously rejected the very
+  bundle the producer already wrote per epoch, because that bundle carries a nested
+  `confusion` (B18). The block's producer semantic is now stated: test metrics come from the
+  **best** epoch's weights, not the last. Two conventions ride along with no structural
+  expression: `host` left the well-known `run` keys (B15) and config artifact paths are
+  repo-relative (B14).
+
 - **`phase_manifest` — `produced_by_*` optional; `path` is phase-folder-relative.** The
   producer fields left every entry type's `required` array (B19), so the curator can index a
   hand-added or externally-produced artifact instead of stamping `"unknown"` / `"0"` sentinels
