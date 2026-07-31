@@ -60,8 +60,9 @@ are all gated on the tag. That makes S12 (the pre-PR run) the wave's real bottle
 
 | Item | Kind | Blocked on | Status |
 |---|---|---|---|
-| Open + merge the v0.6.0 PR **with the `skip-schema-bump` label**, then tag `v0.6.0` on `release` | handoff | Daniel (web UI) | open |
-| Notify the project-lead once tagged, so the linkage doc's Proposed-changes P1–P6 fold into the canonical sections | handoff | — | open |
+| ~~Open + merge the v0.6.0 PR, tag `v0.6.0`~~ | handoff | — | **done** 2026-07-30 (commit `9595f09`; development fast-forwarded, branches + tag on one commit) |
+| ~~Notify the project-lead + adopters that the tag is live~~ | handoff | — | **done** 2026-07-31 (CL-089) |
+| Fold linkage Proposed-changes P1–P6 into the canonical §1–§3 | handoff | project-lead (CL-089) | open — **not this chat's to do** |
 | ~~S1–S12~~ | step | — | **all done** 2026-07-30 |
 | ~~Confirm the `oneOf` + `const` discriminator codegens cleanly~~ | open-question | — | **closed** (S7 probe: emits a proper Pydantic tagged union) |
 
