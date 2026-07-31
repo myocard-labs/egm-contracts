@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 
 import h5py
+import numpy as np
 
 from myocard_egm_contracts.validators import (
     validate_egm_class_model_metadata,
@@ -42,6 +43,50 @@ def test_iafdb_bank_validates_with_none_threshold(valid_iafdb_bank: Path) -> Non
         f.attrs["threshold_mode"] = "none"
         del f.attrs["threshold_value"]
         f.attrs["threshold_value"] = float("nan")
+    result = validate_iafdb_bank(valid_iafdb_bank)
+    assert result.ok, result.issues
+
+
+def test_iafdb_bank_without_activation_position_validates(valid_iafdb_bank: Path) -> None:
+    """1.3 adds the column; nothing populates it until IAF1 ships in Wave 2.
+
+    This is the assertion that keeps the migration/feature wave split intact —
+    if the column ever becomes required, Wave-1 banks stop validating and the
+    splitter work gets dragged forward into the schema wave.
+    """
+    with h5py.File(valid_iafdb_bank, "r") as f:
+        assert "activation_position" not in f["traces"]
+    result = validate_iafdb_bank(valid_iafdb_bank)
+    assert result.ok, result.issues
+
+
+def test_iafdb_bank_with_activation_position_validates(valid_iafdb_bank: Path) -> None:
+    """Endpoints included: an activation may land on the first or last sample."""
+    with h5py.File(valid_iafdb_bank, "r+") as f:
+        n = f["traces"]["signal"].shape[0]
+        f["traces"].create_dataset(
+            "activation_position", data=np.linspace(0.0, 1.0, n, dtype=np.float32)
+        )
+    result = validate_iafdb_bank(valid_iafdb_bank)
+    assert result.ok, result.issues
+
+
+def test_iafdb_bank_with_out_of_range_activation_position_fails(valid_iafdb_bank: Path) -> None:
+    """A value outside [0,1] means the splitter mis-anchored, or a producer wrote
+    a sample index where a fraction belongs — the failure the bounds exist for."""
+    with h5py.File(valid_iafdb_bank, "r+") as f:
+        n = f["traces"]["signal"].shape[0]
+        f["traces"].create_dataset("activation_position", data=np.full(n, 42.0, dtype=np.float32))
+    result = validate_iafdb_bank(valid_iafdb_bank)
+    assert not result
+    assert any("activation_position" in i for i in result.issues), result.issues
+
+
+def test_iafdb_bank_with_run_record_path_validates(valid_iafdb_bank: Path) -> None:
+    """The sidecar pointer is a plain relative string; absence is legal, and is
+    covered by every other iafdb fixture since none of them set it."""
+    with h5py.File(valid_iafdb_bank, "r+") as f:
+        f.attrs["run_record_path"] = "iafdb_healthy_v1_run_record.json"
     result = validate_iafdb_bank(valid_iafdb_bank)
     assert result.ok, result.issues
 
