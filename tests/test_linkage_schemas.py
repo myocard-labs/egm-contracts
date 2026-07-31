@@ -218,6 +218,53 @@ def test_manifest_bad_artifact_id_fails(tmp_path: Path) -> None:
     )
 
 
+_ENTRY_SECTIONS = (
+    "egm_banks",
+    "noise_banks",
+    "training_runs",
+    "models",
+    "observations",
+    "figures",
+    "papers",
+)
+
+
+def test_manifest_entries_validate_without_producer_fields(tmp_path: Path) -> None:
+    """B19: `produced_by_package` / `produced_by_version` are optional on every
+    entry type, so the curator can index an artifact whose producer isn't
+    knowable (hand-added, externally produced, predating the convention)
+    instead of writing "unknown" / "0" sentinels that are indistinguishable
+    from a real producer stamp. Strips them from ALL seven sections at once —
+    the loosening has to be uniform, since a half-applied change leaves the
+    curator guessing which entry types tolerate it."""
+    doc = copy.deepcopy(GOOD_MANIFEST)
+    for section in _ENTRY_SECTIONS:
+        for entry in doc[section]:
+            entry.pop("produced_by_package", None)
+            entry.pop("produced_by_version", None)
+    result = validate_phase_manifest(_write_json(tmp_path, "manifest.json", doc))
+    assert result.ok, result.issues
+
+
+def test_manifest_entries_still_validate_with_producer_fields(tmp_path: Path) -> None:
+    """The other half of B19: optional means optional, not removed. The fully
+    stamped manifest (GOOD_MANIFEST fills both on every entry) must keep
+    validating — producers still write them."""
+    result = validate_phase_manifest(_write_json(tmp_path, "manifest.json", GOOD_MANIFEST))
+    assert result.ok, result.issues
+
+
+def test_manifest_entry_still_requires_id_and_path(tmp_path: Path) -> None:
+    """The loosening stops at the producer fields — an entry without a path is
+    a pointer that points nowhere, so it stays required."""
+    for missing in ("id", "path"):
+        doc = copy.deepcopy(GOOD_MANIFEST)
+        doc["egm_banks"][0].pop(missing)
+        result = validate_phase_manifest(_write_json(tmp_path, "manifest.json", doc))
+        assert not result, f"entry without {missing} should fail"
+        assert any(missing in i for i in result.issues), (missing, result.issues)
+
+
 def test_manifest_bad_usage_tag_fails(tmp_path: Path) -> None:
     doc = copy.deepcopy(GOOD_MANIFEST)
     doc["figures"][0]["usage_tag"] = "totally_made_up"

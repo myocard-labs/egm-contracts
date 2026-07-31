@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/myocard-labs/egm-contracts/schemas/phase_manifest.schema.json",
   "title": "PhaseManifest",
-  "description": "Per-phase shallow index of every artifact that belongs to one project phase, living at intracardiac-platform/project/phases/phase_X/manifest.json. Schema version 1. Entries are POINTERS, not content: each carries only id + path + producer + relationship references (+ optional usage_tag / usage_notes / download_url). Everything else (title, description, layout, metrics, ...) lives inside the standalone file the entry points at. Banks are split by CONTENT/ROLE into two sections: `egm_banks` holds every bank of EGM traces (training tbank_, pretraining ptbank_, and prediction lpred_/upred_ banks — a prediction bank is just an EGM bank whose entry also fills `model` + `source_bank`), and `noise_banks` holds nbank_ banks of additive noise, which differ in both content and role. Relationship field names (trained_on_bank, produced_model, source_bank, consumes_banks, ...) are chosen to map 1:1 onto future provenance-graph edge types. egm-studio is the canonical curator; scripts/validate_manifest.py is the scan-and-validate safety net. Phase membership is recorded here — the artifacts it points at do not themselves declare which phase they belong to. See intracardiac-platform/project/cross_artifact_linkage_design.md sections 3 and 8.",
+  "description": "Per-phase shallow index of every artifact that belongs to one project phase, living at intracardiac-platform/project/phases/phase_X/manifest.json. Schema version 1. Entries are POINTERS, not content: each carries only id + path + producer + relationship references (+ optional usage_tag / usage_notes / download_url). Everything else (title, description, layout, metrics, ...) lives inside the standalone file the entry points at. Banks are split by CONTENT/ROLE into two sections: `egm_banks` holds every bank of EGM traces (training tbank_, pretraining ptbank_, and prediction lpred_/upred_ banks — a prediction bank is just an EGM bank whose entry also fills `model` + `source_bank`), and `noise_banks` holds nbank_ banks of additive noise, which differ in both content and role. Relationship field names (trained_on_bank, produced_model, source_bank, consumes_banks, ...) are chosen to map 1:1 onto future provenance-graph edge types. egm-studio is the canonical curator; scripts/validate_manifest.py is the scan-and-validate safety net. Phase membership is recorded here — the artifacts it points at do not themselves declare which phase they belong to. Every entry requires only `id` + `path`: `produced_by_package` / `produced_by_version` are OPTIONAL (since egm-contracts v0.6.0), because the curator can legitimately index an artifact whose producer isn't knowable — hand-added files, externally-produced data, anything predating the convention — and writing 'unknown' / '0' sentinels to satisfy a required field made those cases indistinguishable from a real producer stamp. Producers still fill both; absence is the honest signal that nobody knows. See intracardiac-platform/project/cross_artifact_linkage_design.md sections 3 and 8.",
   "type": "object",
   "properties": {
     "schema_version": {
@@ -82,7 +82,7 @@
       "description": "Manifest pointer to a bank of EGM traces (training / pretraining / prediction). The id prefix encodes the role. `model` + `source_bank` are filled only for prediction banks (lpred_ / upred_); training and pretraining banks omit them.",
       "properties": {
         "id": { "$ref": "common.schema.json#/$defs/ArtifactId" },
-        "path": { "type": "string", "description": "Path to the bank file, relative to the meta repo (or absolute)." },
+        "path": { "type": "string", "description": "Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema." },
         "produced_by_package": { "type": "string", "description": "Producer package name (e.g. synthetic-egm-pipeline)." },
         "produced_by_version": { "type": "string", "description": "Producer version that wrote the artifact (e.g. v0.2.0)." },
         "model": { "$ref": "common.schema.json#/$defs/ArtifactId", "description": "Prediction banks only: the model that produced the predictions (future edge EVALUATED_BY)." },
@@ -90,7 +90,7 @@
         "download_url": { "type": "string", "format": "uri", "description": "OPTIONAL. GitHub Release asset URL, filled at phase-release time (not write time)." },
         "usage_notes": { "type": "string", "description": "OPTIONAL free-text nuance." }
       },
-      "required": ["id", "path", "produced_by_package", "produced_by_version"],
+      "required": ["id", "path"],
       "additionalProperties": false
     },
     "NoiseBankEntry": {
@@ -99,13 +99,13 @@
       "description": "Manifest pointer to a noise bank (nbank_). No model / source_bank — noise banks are an additive source, never classified.",
       "properties": {
         "id": { "$ref": "common.schema.json#/$defs/ArtifactId" },
-        "path": { "type": "string" },
+        "path": { "type": "string", "description": "Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema." },
         "produced_by_package": { "type": "string" },
         "produced_by_version": { "type": "string" },
         "download_url": { "type": "string", "format": "uri", "description": "OPTIONAL. Filled at release time." },
         "usage_notes": { "type": "string" }
       },
-      "required": ["id", "path", "produced_by_package", "produced_by_version"],
+      "required": ["id", "path"],
       "additionalProperties": false
     },
     "TrainingRunEntry": {
@@ -114,14 +114,14 @@
       "description": "Manifest pointer to a training run record (run.json).",
       "properties": {
         "id": { "$ref": "common.schema.json#/$defs/ArtifactId" },
-        "path": { "type": "string" },
+        "path": { "type": "string", "description": "Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema." },
         "produced_by_package": { "type": "string" },
         "produced_by_version": { "type": "string" },
         "trained_on_bank": { "$ref": "common.schema.json#/$defs/ArtifactId", "description": "Relationship: run -> training bank (future edge TRAINED_ON)." },
         "produced_model": { "$ref": "common.schema.json#/$defs/ArtifactId", "description": "Relationship: run -> model (future edge PRODUCED)." },
         "usage_notes": { "type": "string" }
       },
-      "required": ["id", "path", "produced_by_package", "produced_by_version"],
+      "required": ["id", "path"],
       "additionalProperties": false
     },
     "ModelEntry": {
@@ -130,14 +130,14 @@
       "description": "Manifest pointer to an exported model.",
       "properties": {
         "id": { "$ref": "common.schema.json#/$defs/ArtifactId" },
-        "path": { "type": "string" },
+        "path": { "type": "string", "description": "Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema." },
         "produced_by_package": { "type": "string" },
         "produced_by_version": { "type": "string" },
         "trained_from_run": { "$ref": "common.schema.json#/$defs/ArtifactId", "description": "Relationship: model -> run (future edge TRAINED_FROM, inverse of PRODUCED)." },
         "download_url": { "type": "string", "format": "uri", "description": "OPTIONAL. Filled at release time." },
         "usage_notes": { "type": "string" }
       },
-      "required": ["id", "path", "produced_by_package", "produced_by_version"],
+      "required": ["id", "path"],
       "additionalProperties": false
     },
     "ObservationEntry": {
@@ -146,13 +146,13 @@
       "description": "Manifest pointer to an observation file.",
       "properties": {
         "id": { "$ref": "common.schema.json#/$defs/ArtifactId" },
-        "path": { "type": "string" },
+        "path": { "type": "string", "description": "Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema." },
         "produced_by_package": { "type": "string" },
         "produced_by_version": { "type": "string" },
         "usage_tag": { "$ref": "#/$defs/UsageTag", "description": "OPTIONAL day-to-day; REQUIRED at release-gate. For observations, 'informed_paper' marks one that informed a paper claim." },
         "usage_notes": { "type": "string" }
       },
-      "required": ["id", "path", "produced_by_package", "produced_by_version"],
+      "required": ["id", "path"],
       "additionalProperties": false
     },
     "FigureEntry": {
@@ -161,7 +161,7 @@
       "description": "Manifest pointer to a figure spec file.",
       "properties": {
         "id": { "$ref": "common.schema.json#/$defs/FigureId" },
-        "path": { "type": "string" },
+        "path": { "type": "string", "description": "Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema." },
         "produced_by_package": { "type": "string" },
         "produced_by_version": { "type": "string" },
         "consumes_banks": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/ArtifactId" }, "description": "Relationship: figure -> banks it visualizes (future edge VISUALIZES). May reference egm_banks and/or noise_banks." },
@@ -170,7 +170,7 @@
         "usage_tag": { "$ref": "#/$defs/UsageTag", "description": "OPTIONAL day-to-day; REQUIRED at release-gate. For figures, 'in_paper_main' / 'in_paper_supplementary' place it in the paper." },
         "usage_notes": { "type": "string" }
       },
-      "required": ["id", "path", "produced_by_package", "produced_by_version"],
+      "required": ["id", "path"],
       "additionalProperties": false
     },
     "PaperEntry": {
@@ -179,13 +179,13 @@
       "description": "Manifest pointer to a paper directory in intracardiac-papers.",
       "properties": {
         "id": { "$ref": "common.schema.json#/$defs/PaperId" },
-        "path": { "type": "string" },
+        "path": { "type": "string", "description": "Path to the artifact file, relative to the phase folder this manifest lives in (e.g. 'banks/tbank_synthetic_v1_5.h5'). In-phase artifacts are copied under the phase folder and recorded relatively so the folder is self-contained and movable; an artifact that genuinely lives outside it may still be recorded as an absolute path, but that ties the manifest to one machine. Unconstrained string - the shape is convention, checked by the validator script, not by this schema." },
         "produced_by_package": { "type": "string" },
         "produced_by_version": { "type": "string", "description": "The paper repo isn't version-tagged like the libraries; 'latest' is acceptable." },
         "figures": { "type": "array", "items": { "$ref": "common.schema.json#/$defs/FigureId" }, "description": "Figures this paper includes." },
         "usage_notes": { "type": "string" }
       },
-      "required": ["id", "path", "produced_by_package", "produced_by_version"],
+      "required": ["id", "path"],
       "additionalProperties": false
     }
   }
