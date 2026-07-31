@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class TrainingMetricsRow(BaseModel):
     """
-    Flat per-epoch training metrics, one row per epoch in metrics.csv. Column order is the contract (consumers read by header name, but plot/spreadsheet defaults assume this order). The CSV writes empty cells for non-finite values; the JSON representation of a row treats those as null. Schema describes one row. Validity rule: epoch / lr / train_loss / val_loss / epoch_seconds are always present and finite — if a producer writes them as null/empty, that's a producer bug worth surfacing. Validation metrics (val_auroc / val_accuracy / etc.) are legitimately nullable: AUROC is undefined on a single-class val split, ECE is undefined when no reliability bin contains samples, etc. Renamed from 'metrics' at egm-contracts v0.3.0 — parallel to TrainingRunRecord. Future per-activity metric tables would get their own schemas.
+    Flat per-epoch training metrics, one row per epoch in metrics.csv. Column order is the contract (consumers read by header name, but plot/spreadsheet defaults assume this order). The CSV writes empty cells for non-finite values; the JSON representation of a row treats those as null. Schema describes one row. Validity rule: epoch / lr / train_loss / val_loss / epoch_seconds are always present and finite — if a producer writes them as null/empty, that's a producer bug worth surfacing. Validation metrics (val_auroc / val_accuracy / etc.) are legitimately nullable: AUROC is undefined on a single-class val split, ECE is undefined when no reliability bin contains samples, etc. The matching train_* metrics (egm-contracts v0.6.0) are nullable for the same reasons, and are additionally absent from CSVs written before the producer emitted them — this schema is additionalProperties:false, so the columns had to land here before any producer could write them. Column order pairs the blocks (epoch, lr, train_loss, train_*, val_loss, val_*, epoch_seconds) rather than appending train at the end: the reason for carrying both is reading the divergence between them, which a spreadsheet makes obvious only when they sit side by side. NOTE: this schema carries no schema_version property — a CSV row has nowhere to put one — so its evolution is tracked in project/schema_evolution.md and by the package version alone. Renamed from 'metrics' at egm-contracts v0.3.0 — parallel to TrainingRunRecord. Future per-activity metric tables would get their own schemas.
     """
 
     model_config = ConfigDict(
@@ -25,6 +25,30 @@ class TrainingMetricsRow(BaseModel):
     train_loss: float
     """
     Mean training-set loss across all batches in the epoch. Required and finite.
+    """
+    train_auroc: float | None = Field(None, ge=0.0, le=1.0)
+    """
+    Training AUROC for the positive class. Null when AUROC is undefined (e.g. a single-class batch stream, or zero positives). Added in the egm-contracts v0.6.0 train-metrics bundle; nullable, and absent entirely on CSVs written before the producer emitted train metrics.
+    """
+    train_accuracy: float | None = Field(None, ge=0.0, le=1.0)
+    """
+    Training accuracy at the configured decision threshold (typically 0.5). Null when the training set is empty. Added in the egm-contracts v0.6.0 train-metrics bundle; nullable, and absent entirely on CSVs written before the producer emitted train metrics.
+    """
+    train_precision: float | None = Field(None, ge=0.0, le=1.0)
+    """
+    Training precision = TP / (TP + FP). Null when TP + FP == 0 (no positives predicted). Added in the egm-contracts v0.6.0 train-metrics bundle; nullable, and absent entirely on CSVs written before the producer emitted train metrics.
+    """
+    train_recall: float | None = Field(None, ge=0.0, le=1.0)
+    """
+    Training recall = TP / (TP + FN). Null when TP + FN == 0 (no actual positives seen). Added in the egm-contracts v0.6.0 train-metrics bundle; nullable, and absent entirely on CSVs written before the producer emitted train metrics.
+    """
+    train_f1: float | None = Field(None, ge=0.0, le=1.0)
+    """
+    Training F1 = harmonic mean of precision and recall. Null when either precision or recall is null. Added in the egm-contracts v0.6.0 train-metrics bundle; nullable, and absent entirely on CSVs written before the producer emitted train metrics.
+    """
+    train_ece: float | None = Field(None, ge=0.0)
+    """
+    Expected Calibration Error on the training split. Null when no reliability bin contains samples. Note the train split's ECE is computed from the same running predictions as the other train metrics, so it reflects the model as it changed DURING the epoch, not a single fixed model. Added in the egm-contracts v0.6.0 train-metrics bundle; nullable, and absent entirely on CSVs written before the producer emitted train metrics.
     """
     val_loss: float
     """

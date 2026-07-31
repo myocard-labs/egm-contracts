@@ -6,6 +6,7 @@ against them and against deliberately-malformed variants.
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
 
@@ -178,6 +179,99 @@ def test_held_out_test_accepts_the_val_metrics_bundle(valid_training_run_record:
 def test_training_metrics_csv_validates(valid_training_metrics_csv: Path) -> None:
     result = validate_training_metrics(valid_training_metrics_csv)
     assert result.ok, result.issues
+
+
+def test_training_metrics_csv_without_train_columns_validates(
+    valid_training_metrics_csv: Path,
+) -> None:
+    """The fixture predates the train_* block, which is the Wave-1 case: a CSV
+    written before the producer emits them is still valid."""
+    header = valid_training_metrics_csv.read_text().splitlines()[0]
+    assert "train_auroc" not in header
+    result = validate_training_metrics(valid_training_metrics_csv)
+    assert result.ok, result.issues
+
+
+def test_training_metrics_csv_with_train_columns_validates(tmp_path: Path) -> None:
+    """The populated path, written in the contract's own column order.
+
+    Uses csv_column_order() rather than a hand-typed header, so the test can't
+    drift from the schema — and a row of empty cells covers the nullable case
+    (a metric undefined for that epoch writes an empty cell, not a zero).
+    """
+    from myocard_egm_contracts.schema_info import csv_column_order
+
+    columns = csv_column_order("training_metrics")
+    values = {
+        "epoch": 1,
+        "lr": 0.001,
+        "train_loss": 0.5,
+        "train_auroc": 0.91,
+        "train_accuracy": 0.88,
+        "train_precision": 0.87,
+        "train_recall": 0.86,
+        "train_f1": 0.865,
+        "train_ece": 0.03,
+        "val_loss": 0.45,
+        "val_auroc": 0.85,
+        "val_accuracy": 0.8,
+        "val_precision": 0.81,
+        "val_recall": 0.78,
+        "val_f1": 0.79,
+        "val_ece": 0.05,
+        "epoch_seconds": 12.3,
+    }
+    nulled = {
+        k: ("" if k.startswith(("train_a", "train_p", "train_r", "train_f", "train_e")) else v)
+        for k, v in values.items()
+    }
+
+    path = tmp_path / "metrics.csv"
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=list(columns))
+        writer.writeheader()
+        writer.writerow(values)
+        writer.writerow(nulled)
+
+    result = validate_training_metrics(path)
+    assert result.ok, result.issues
+
+
+def test_training_metrics_column_order_pairs_the_blocks() -> None:
+    """The order is part of the contract (B18/CL-037): train_* sits between
+    train_loss and val_loss, not appended after the val block.
+
+    Appending would have been the smaller diff; it was rejected because the
+    reason for carrying both splits is reading their divergence, and a
+    spreadsheet only makes that obvious when the pairs are adjacent.
+    """
+    from myocard_egm_contracts.schema_info import csv_column_order, get_schema
+
+    order = csv_column_order("training_metrics")
+    train_block = [c for c in order if c.startswith("train_") and c != "train_loss"]
+    val_block = [c for c in order if c.startswith("val_") and c != "val_loss"]
+
+    assert order.index("train_loss") < order.index(train_block[0])
+    assert order.index(train_block[-1]) < order.index("val_loss")
+    assert order.index("val_loss") < order.index(val_block[0])
+    assert order[-1] == "epoch_seconds"
+    # Every declared property is in the order, and vice versa — the two drift
+    # apart silently otherwise, since nothing else compares them.
+    assert set(order) == set(get_schema("training_metrics")["properties"])
+
+
+def test_training_metrics_rejects_unknown_column(tmp_path: Path) -> None:
+    """additionalProperties:false is why the columns had to ship before the
+    producer could write them — this is that rejection, made visible."""
+    path = tmp_path / "metrics.csv"
+    path.write_text(
+        "epoch,lr,train_loss,val_loss,epoch_seconds,train_mystery\n1,0.001,0.5,0.45,1.0,0.9\n"
+    )
+    result = validate_training_metrics(path)
+    assert not result
+    assert any("train_mystery" in i or "additional" in i.lower() for i in result.issues), (
+        result.issues
+    )
 
 
 def test_egm_class_model_metadata_validates(valid_egm_class_model_metadata: Path) -> None:

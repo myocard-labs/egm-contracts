@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/myocard-labs/egm-contracts/schemas/training_metrics.schema.json",
   "title": "TrainingMetricsRow",
-  "description": "Flat per-epoch training metrics, one row per epoch in metrics.csv. Column order is the contract (consumers read by header name, but plot/spreadsheet defaults assume this order). The CSV writes empty cells for non-finite values; the JSON representation of a row treats those as null. Schema describes one row. Validity rule: epoch / lr / train_loss / val_loss / epoch_seconds are always present and finite — if a producer writes them as null/empty, that's a producer bug worth surfacing. Validation metrics (val_auroc / val_accuracy / etc.) are legitimately nullable: AUROC is undefined on a single-class val split, ECE is undefined when no reliability bin contains samples, etc. Renamed from 'metrics' at egm-contracts v0.3.0 — parallel to TrainingRunRecord. Future per-activity metric tables would get their own schemas.",
+  "description": "Flat per-epoch training metrics, one row per epoch in metrics.csv. Column order is the contract (consumers read by header name, but plot/spreadsheet defaults assume this order). The CSV writes empty cells for non-finite values; the JSON representation of a row treats those as null. Schema describes one row. Validity rule: epoch / lr / train_loss / val_loss / epoch_seconds are always present and finite — if a producer writes them as null/empty, that's a producer bug worth surfacing. Validation metrics (val_auroc / val_accuracy / etc.) are legitimately nullable: AUROC is undefined on a single-class val split, ECE is undefined when no reliability bin contains samples, etc. The matching train_* metrics (egm-contracts v0.6.0) are nullable for the same reasons, and are additionally absent from CSVs written before the producer emitted them — this schema is additionalProperties:false, so the columns had to land here before any producer could write them. Column order pairs the blocks (epoch, lr, train_loss, train_*, val_loss, val_*, epoch_seconds) rather than appending train at the end: the reason for carrying both is reading the divergence between them, which a spreadsheet makes obvious only when they sit side by side. NOTE: this schema carries no schema_version property — a CSV row has nowhere to put one — so its evolution is tracked in project/schema_evolution.md and by the package version alone. Renamed from 'metrics' at egm-contracts v0.3.0 — parallel to TrainingRunRecord. Future per-activity metric tables would get their own schemas.",
   "type": "object",
   "properties": {
     "epoch": {
@@ -19,42 +19,113 @@
       "type": "number",
       "description": "Mean training-set loss across all batches in the epoch. Required and finite."
     },
+    "train_auroc": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Training AUROC for the positive class. Null when AUROC is undefined (e.g. a single-class batch stream, or zero positives). Added in the egm-contracts v0.6.0 train-metrics bundle; nullable, and absent entirely on CSVs written before the producer emitted train metrics."
+    },
+    "train_accuracy": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Training accuracy at the configured decision threshold (typically 0.5). Null when the training set is empty. Added in the egm-contracts v0.6.0 train-metrics bundle; nullable, and absent entirely on CSVs written before the producer emitted train metrics."
+    },
+    "train_precision": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Training precision = TP / (TP + FP). Null when TP + FP == 0 (no positives predicted). Added in the egm-contracts v0.6.0 train-metrics bundle; nullable, and absent entirely on CSVs written before the producer emitted train metrics."
+    },
+    "train_recall": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Training recall = TP / (TP + FN). Null when TP + FN == 0 (no actual positives seen). Added in the egm-contracts v0.6.0 train-metrics bundle; nullable, and absent entirely on CSVs written before the producer emitted train metrics."
+    },
+    "train_f1": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Training F1 = harmonic mean of precision and recall. Null when either precision or recall is null. Added in the egm-contracts v0.6.0 train-metrics bundle; nullable, and absent entirely on CSVs written before the producer emitted train metrics."
+    },
+    "train_ece": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "Expected Calibration Error on the training split. Null when no reliability bin contains samples. Note the train split's ECE is computed from the same running predictions as the other train metrics, so it reflects the model as it changed DURING the epoch, not a single fixed model. Added in the egm-contracts v0.6.0 train-metrics bundle; nullable, and absent entirely on CSVs written before the producer emitted train metrics."
+    },
     "val_loss": {
       "type": "number",
       "description": "Mean validation-set loss across all batches in the epoch. Required and finite. (Validation-set selection lives in the run config, not here.)"
     },
     "val_auroc": {
-      "type": ["number", "null"],
+      "type": [
+        "number",
+        "null"
+      ],
       "minimum": 0,
       "maximum": 1,
       "description": "Validation AUROC for the positive class. Null when AUROC is undefined (e.g., a single-class val split, or zero positives)."
     },
     "val_accuracy": {
-      "type": ["number", "null"],
+      "type": [
+        "number",
+        "null"
+      ],
       "minimum": 0,
       "maximum": 1,
       "description": "Validation accuracy at the configured decision threshold (typically 0.5). Null when the val set is empty."
     },
     "val_precision": {
-      "type": ["number", "null"],
+      "type": [
+        "number",
+        "null"
+      ],
       "minimum": 0,
       "maximum": 1,
       "description": "Validation precision = TP / (TP + FP). Null when TP + FP == 0 (no positives predicted)."
     },
     "val_recall": {
-      "type": ["number", "null"],
+      "type": [
+        "number",
+        "null"
+      ],
       "minimum": 0,
       "maximum": 1,
       "description": "Validation recall = TP / (TP + FN). Null when TP + FN == 0 (no actual positives in val set)."
     },
     "val_f1": {
-      "type": ["number", "null"],
+      "type": [
+        "number",
+        "null"
+      ],
       "minimum": 0,
       "maximum": 1,
       "description": "Validation F1 = harmonic mean of precision and recall. Null when either precision or recall is null."
     },
     "val_ece": {
-      "type": ["number", "null"],
+      "type": [
+        "number",
+        "null"
+      ],
       "minimum": 0,
       "description": "Expected Calibration Error: weighted average gap between predicted confidence and empirical accuracy across reliability bins. Lower is better-calibrated. Null when no reliability bin contains samples."
     },
@@ -64,10 +135,31 @@
       "description": "Wall-clock seconds spent on this epoch (training + validation). Required."
     }
   },
-  "required": ["epoch", "lr", "train_loss", "val_loss", "epoch_seconds"],
+  "required": [
+    "epoch",
+    "lr",
+    "train_loss",
+    "val_loss",
+    "epoch_seconds"
+  ],
   "additionalProperties": false,
   "x-csv-column-order": [
-    "epoch", "lr", "train_loss", "val_loss", "val_auroc", "val_accuracy",
-    "val_precision", "val_recall", "val_f1", "val_ece", "epoch_seconds"
+    "epoch",
+    "lr",
+    "train_loss",
+    "train_auroc",
+    "train_accuracy",
+    "train_precision",
+    "train_recall",
+    "train_f1",
+    "train_ece",
+    "val_loss",
+    "val_auroc",
+    "val_accuracy",
+    "val_precision",
+    "val_recall",
+    "val_f1",
+    "val_ece",
+    "epoch_seconds"
   ]
 }
