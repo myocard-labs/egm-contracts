@@ -2,8 +2,8 @@
 
 **Repo:** egm-contracts · **Phase:** 1.5
 **Phase design doc:** `intracardiac-platform/phases/phase_1_5/design.md`
-**Status:** in progress · **Progress:** 9/13 steps done (S1–S6, S6b, S7, S8) — additive work complete
-and **egm-data's S10 is unblocked**. Remaining: S9–S11 (`synthetic_bank` 2.0) · S12 (PR)
+**Status:** in progress · **Progress:** 12/13 steps done (S1–S11) — the whole v0.6.0 schema surface is
+built. Remaining: **S12** (phase-exit docs + the pre-PR run).
 **Repo estimate:** **14–29.5 h** active (Cx **15** points) — the project-lead reads this into design §6;
 this chat does not edit the design doc.
 
@@ -58,8 +58,9 @@ are all gated on the tag. That makes S12 (the pre-PR run) the wave's real bottle
 
 | Item | Kind | Blocked on | Status |
 |---|---|---|---|
-| S3–S12 not started (S1 landed with the plan commits; S2 done 2026-07-30) | step | — | open |
-| Confirm the polymorphic `oneOf` + `const` discriminator codegens cleanly through datamodel-code-generator | open-question | — (resolved inside S7; fallback noted in Design notes) | open |
+| **S12** — phase-exit docs (roadmap trim, README) + the full pre-PR run | step | — | open |
+| PR needs the `skip-schema-bump` label (`phase_manifest` changed without a version move) | blocker-at-PR | — | open |
+| ~~Confirm the `oneOf` + `const` discriminator codegens cleanly~~ | open-question | — | **closed** (S7 probe: emits a proper Pydantic tagged union) |
 
 No cross-chat blockers: B17 was answered (CL-051), the join key needs no CON change (CL-012 → CL-024
 §3), and both `activation_position` flow-downs are folded in (CL-053, CL-062). Nothing here waits on
@@ -67,9 +68,11 @@ another chat.
 
 ## Design notes
 
-- **One `simulation_config.schema.json`** *(Daniel, 2026-07-28)*. The seven per-function polymorphic
-  objects (`geometry` / `cell_model` / `substrate` / `activation` / `electrodes` / `backend` /
-  `label_policy`) plus `TunedParam` + `generation_params` live as `$defs` in a single new schema file;
+- **One `simulation_config.schema.json`** *(Daniel, 2026-07-28; scope corrected 2026-07-30)*. The seven
+  per-function polymorphic objects (`geometry` / `cell_model` / `substrate` / `activation` /
+  `electrodes` / `backend` / `label_policy`) live as `$defs` in a single new schema file. **The θ-spec
+  does NOT** — `TunedParam` + `GenerationParams` are bank-scoped and live in
+  `generation_params.schema.json` (S8 review); this file is per-simulation only.
   `synthetic_bank.schema.json` reaches them by cross-file `$ref`, the same mechanism
   `common.schema.json` already uses (the validators' `referencing.Registry` resolves it). Rationale:
   codegen emits one importable module for egm-data / synthetic-egm-pipeline / egm-studio to share,
@@ -77,10 +80,9 @@ another chat.
   them — without eight new files, modules, and docs pages for objects that only appear inside a bank.
   Like `common`, it is a `$defs` library, not a document format: no document validator, nothing on disk
   in that shape.
-- **Polymorphism encoding.** Each function is `oneOf` over per-variant subschemas, each pinned by a
-  `type` `const`. S7 verifies this codegens to a clean discriminated union through
-  datamodel-code-generator before the shape is committed everywhere; fallback is the JSON Schema
-  `discriminator` annotation or plain per-variant `$defs` + a `Union` alias.
+- **Polymorphism encoding — verified.** Each function is `oneOf` over per-variant subschemas pinned by
+  a `type` `const`, plus a `discriminator` annotation. A scratch probe (S7) confirmed this codegens to
+  a proper Pydantic tagged union (`A | B` with `discriminator="type"`), so no fallback was needed.
 - **Role-prefix single-sourcing without generating a schema.** The JSON Schema stays hand-written
   truth (JSON-Schema-first), so `ArtifactId`'s pattern carries an explicit prefix alternation and a
   unit test asserts that alternation matches `codegen/roles.json`. That keeps the vocabulary in one
@@ -244,7 +246,7 @@ Every step ends green: `ruff format src tests` → `ruff check src tests` → `m
   Wave 1; a multi-knob spec validates; a bad `transform` / `role` is rejected.
 - **Depends on:** S7.
 
-### S9 — `synthetic_bank` 2.0 restructure ☐ (1.5–3 h)
+### S9 — `synthetic_bank` 2.0 restructure ✅ (1.5–3 h)
 - **Change:** `schema_version` enum → `["2.0"]`. Root attrs reduce to `schema_version`,
   `created_utc`, `bank_id`, `description`, `fs_hz`, `trace_duration_ms`, `noise_bank_source` +
   `generation_params_json` (the θ-spec). New `simulations` group — `simulation_id`, `seed`, and the
@@ -265,7 +267,7 @@ Every step ends green: `ruff format src tests` → `ruff check src tests` → `m
   drift check clean.
 - **Depends on:** S8.
 
-### S10 — v2.0 validator + fixtures ☐ (1.5–3 h)
+### S10 — v2.0 validator + fixtures ✅ (1.5–3 h)
 - **Change:** `validators/synthetic_bank.py` reads the `simulations/` group and decodes its per-row
   `*_json` columns (extend `_hdf5.py` if the per-row decode is reusable); drop the old
   `_JSON_ENCODED_ATTRS` root mapping except `generation_params_json`. Rewrite the `valid_synthetic_bank`
@@ -275,7 +277,7 @@ Every step ends green: `ruff format src tests` → `ruff check src tests` → `m
   with a useful message.
 - **Depends on:** S9.
 
-### S11 — `synthetic_bank` docs ☐ (1–2 h)
+### S11 — `synthetic_bank` docs ✅ (1–2 h)
 - **Change:** rewrite `docs/schemas/synthetic_bank.md` for 2.0 (structure, the per-sim / per-trace
   split, the FK join, the θ-spec); add `docs/schemas/simulation_config.md`; `schema_evolution.md`
   `synthetic_bank` entry recording the breaking 2.0 restructure + the deliberate no-migration
@@ -362,6 +364,17 @@ restructure really did dwarf the XS additive ones. Worth a look when the method 
   `simulation_id`, egm-data adds a writer check. (4) **P3's egm-data half is already shipped**, so P3 is
   the B16 validator here + a content check there. (5) **Effort rule (§5b):** planning sessions count
   toward issue Actuals — **superseded same day, see below.**
+- **2026-07-30** — *S9–S11 shipped together.* S9 (schema) could not end green on its own — changing
+  `synthetic_bank` invalidates the fixture — so the validator rewrite and the 2.0 fixture came with
+  it, which was S10's scope. Two things the plan didn't anticipate: (1) the validator gained a
+  **cross-group foreign-key check** (`traces/simulation_id` → `simulations/simulation_id`), since
+  JSON Schema can't reference between sibling groups and that key is what holds the normalization
+  together; (2) `_hdf5.read_json_columns` decodes the per-row JSON columns, leaving a malformed row
+  as a string so the validator reports a type error against the named column rather than raising a
+  `JSONDecodeError` from inside the loader. S11 added two new docs pages (`simulation_config`,
+  `generation_params`), rewrote `synthetic_bank.md`, and retired the `stim_edge` entry in
+  `known_issues.md` — it had predicted the stimulus problem but not that three sibling columns
+  shared it. Every JSON example in the three docs pages is machine-checked against the schemas.
 - **2026-07-30** — *S8 review (Daniel) → θ-spec moved to its own schema.* I had put `TunedParam` +
   `GenerationParams` in `simulation_config.schema.json`, which is a **scope error**: that file is
   per-simulation by name, title and description, while the θ-spec is **bank/sweep-scoped** — the

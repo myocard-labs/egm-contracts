@@ -270,6 +270,58 @@ introduction version.
 - **1.0** — egm-contracts v0.3.0. Initial release of this schema
   (renamed from `model_metadata`).
 
+### synthetic_bank
+
+- **2.0 — BREAKING** — egm-contracts v0.6.0, Phase-1.5 Wave 1 (CON1). The
+  restructure the migration wave exists for. Generation parameters moved out of
+  `traces/` into a new **`simulations/`** group, one row per simulation, holding
+  typed polymorphic objects per generation function (`simulation_config.schema.json`);
+  `generation_params` became the bank-scoped **θ-spec**
+  (`generation_params.schema.json`) at root attrs; the label became a plain
+  **int** with its policy + `{int: name}` map recorded per simulation; and a new
+  optional per-trace `activation_position` landed (CL-060).
+  - **Removed from `traces/`:** `fibrosis_density`, `fibrosis_density_realized`,
+    `stim_edge`, `electrode_row`, `electrode_height_mm`, `seed`. **Removed from
+    root:** `simulator`, `cell_model`, `patch_size_mm`, `patch_dr_mm`,
+    `ap_time_unit_ms`, `fibrosis_strategy_name`, `fibrosis_params`,
+    `electrode_config`, `mixer_config`, `experiment_config`.
+  - **Why break rather than extend:** each removed column encoded a Phase-1
+    assumption (a scalar density presumes a uniform-random draw; a four-value
+    `stim_edge` presumes a planar wave on a 2D patch), so every new cell model,
+    substrate or stimulus forced either new columns or a **silent change of
+    meaning** in an existing one — a bank would keep validating while meaning
+    something different. They were also per-trace copies of per-simulation facts.
+  - **No migration path, deliberately.** A 1.1 bank is refused outright rather
+    than partially read, since a partial read would drop the generation config —
+    the thing worth keeping. Affordable only because nothing released depends on
+    a 1.1 bank and banks regenerate from config in hours; the same call after
+    publication would not be available. Resolves the long-standing `stim_edge`
+    entry in `known_issues.md`, which had anticipated the stimulus problem but
+    not that three sibling columns shared it.
+  - **Cross-group key:** `traces/simulation_id` → `simulations/simulation_id` is
+    not expressible in JSON Schema, so the validator checks it directly; an
+    orphan id is a trace whose provenance can't be resolved.
+
+### simulation_config *(new, v0.6.0)*
+
+- Shared `$defs` library — no `schema_version`, no document validator. Seven
+  `type`-discriminated unions (geometry / cell_model / substrate / activation /
+  electrodes / backend / label_policy) plus `SubstrateSummary`, `LabelNames`,
+  `BipolarPair`, and the single-sourced `Edge` + `PositionMm`. Discriminators
+  mirror synthetic-egm-pipeline's `simulate/specs.py` `Literal`s exactly.
+  Adding a **variant** is additive; adding a required field to an existing
+  variant is breaking and needs the referencing bank schema to bump.
+
+### generation_params *(new, v0.6.0)*
+
+- Shared `$defs` library holding `TunedParam` + `GenerationParams` — the
+  bank-scoped θ-spec. **Separate from `simulation_config` on purpose:** that
+  describes ONE simulation, this describes the sweep that produced many, and the
+  two are stored in different places (per-sim group vs root attr). Linked only by
+  `TunedParam.path`, an opaque dotted string, so neither schema depends on the
+  other. `path` ships without a grammar (CL-024 deferred the resolver);
+  constraining it later is additive.
+
 ### training_metrics
 
 - **(v0.6.0, no `schema_version` — a CSV row has nowhere to carry one)** —

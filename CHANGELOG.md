@@ -16,7 +16,40 @@ under [Earlier versions](#earlier-versions).
 Phase-1.5 Wave 1 — the coordinated **v0.6.0** schema bump. Accumulating; ships as one release
 (the whole constellation re-pins to it, so it lands as a single tag).
 
+### Changed — breaking
+
+- **`synthetic_bank` 2.0 — generation config reorganized by function.** Parameters moved out
+  of `traces/` into a new **`simulations/`** group (one row per simulation) holding typed
+  polymorphic objects; `generation_params` became the bank-scoped **θ-spec** at root attrs; the
+  label became a plain **int** with its policy and `{int: name}` map recorded per simulation.
+  `traces/` is now signal + two foreign keys + label + noise provenance, plus the optional
+  `activation_position`.
+
+  Each removed column encoded a Phase-1 assumption — a scalar `fibrosis_density` presumes a
+  uniform-random draw, a four-value `stim_edge` presumes a planar wave on a 2D patch — so a new
+  cell model, substrate or stimulus forced either new columns or a silent change of meaning in
+  an existing one. They were also per-trace copies of per-simulation facts.
+
+  **No migration path:** a 1.1 bank is refused rather than partially read, since a partial read
+  would drop the generation config. Affordable only because nothing released depends on a 1.1
+  bank; the same call after publication would not be available. Resolves the long-standing
+  `stim_edge` entry in `known_issues.md`.
+
 ### Added
+
+- **`simulation_config.schema.json`** *(new)* — shared `$defs` for the per-simulation generation
+  config: seven `type`-discriminated unions (geometry / cell_model / substrate / activation /
+  electrodes / backend / label_policy) whose discriminators mirror the producer's `specs.py`
+  exactly. A new substrate type or stimulus protocol extends a union rather than touching the
+  bank. Label policies take an ascending `thresholds[]` array, so multiclass severity needs no
+  new variant.
+
+- **`generation_params.schema.json`** *(new)* — shared `$defs` for the bank-scoped θ-spec
+  (`TunedParam` + `GenerationParams`): which knobs a sweep varied, over what ranges, in which
+  structural regime. Kept separate from `simulation_config` because one describes a single
+  simulation and the other a whole sweep. A `TunedParam` stores no value — it points into the
+  per-simulation config by an opaque dotted `path`, so there is never a second source of truth
+  for the same number.
 
 - **`common.ActivationPosition`** — the shared `[0,1]` activation-position fraction (`idx =
   round(frac * (T - 1))`), defined once in `common.schema.json` and `$ref`'d by both

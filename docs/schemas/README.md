@@ -22,7 +22,9 @@ documentation.
 
 | Schema | Document type | One-line role |
 |---|---|---|
-| [synthetic_bank](synthetic_bank.md) | HDF5 | Synthetic intracardiac EGM bank |
+| [synthetic_bank](synthetic_bank.md) | HDF5 | Synthetic intracardiac EGM bank: root attrs + a per-simulation group + per-trace columns |
+| [simulation_config](simulation_config.md) | *shared `$defs`* | How ONE simulation was generated, by generation function (geometry / cell model / substrate / activation / electrodes / backend / label policy). Referenced by synthetic_bank's `simulations/` group. |
+| [generation_params](generation_params.md) | *shared `$defs`* | The bank-scoped θ-spec: which knobs a sweep varied, over what ranges, in which structural regime. Referenced by synthetic_bank's root attrs. |
 | [iafdb_bank](iafdb_bank.md) | HDF5 | Calibrated bipolar EGM segments extracted from PhysioNet IAFDB |
 | [noise_bank](noise_bank.md) | HDF5 | Quiet bipolar EGM segments extracted from any real EGM dataset, used as additive noise by the synthetic mixer. Minimal: only what the mixer consumes. |
 | [noise_bank_run_record](noise_bank_run_record.md) | JSON | Provenance sidecar for a noise_bank: calibration, threshold, windowing, per-trace audit. Paired with a noise_bank by name-stem convention. |
@@ -42,6 +44,15 @@ other on-disk record formats in this package. Their files live in
 schemas are defined once in `common.schema.json` and referenced cross-file
 (it is a shared-`$defs` file, not a document format). See
 `intracardiac-platform/project/cross_artifact_linkage_design.md`.
+
+**Three of the entries above are shared-`$defs` files rather than document
+formats**: `common`, `simulation_config` and `generation_params`. Nothing is
+written to disk in their shape and they have no document validator — they exist
+so a definition used by several schemas is written once. `common` holds the id
+patterns and the `[0,1]` activation position; the other two hold the synthetic
+bank's per-simulation config and its bank-level θ-spec, which are split apart
+because one describes a single simulation and the other describes a whole
+sweep.
 
 ---
 
