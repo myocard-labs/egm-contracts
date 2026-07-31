@@ -11,10 +11,17 @@ changed per release and names the affected `schema_version`s. Entries are per-ve
 `v0.5.0` on; the beta that built the seven-schema baseline (`v0.1.0`–`v0.4.1`) is summarized
 under [Earlier versions](#earlier-versions).
 
-## [Unreleased]
+## [0.6.0] — 2026-07-30
 
-Phase-1.5 Wave 1 — the coordinated **v0.6.0** schema bump. Accumulating; ships as one release
-(the whole constellation re-pins to it, so it lands as a single tag).
+Phase-1.5 Wave 1 — the coordinated schema bump the whole constellation re-pins to. Seven schema
+groups in one release: the breaking `synthetic_bank` restructure plus six additive changes.
+Downstream order is fixed by the re-pin cascade — egm-data first, then the producers and
+consumers.
+
+**Schema versions in this release:** `synthetic_bank` **2.0** (breaking) · `iafdb_bank` **1.3** ·
+`noise_bank` **1.1** · `training_run_record` **1.2** · `phase_manifest` **1** (unchanged; the
+change was a `required` loosening) · `training_metrics` (no version field) · `common`,
+`simulation_config`, `generation_params` (shared `$defs`, versioned with the package).
 
 ### Changed — breaking
 

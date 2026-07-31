@@ -16,28 +16,15 @@ work carry a `→ tracked at intracardiac-platform Phase X` annotation.
 
 ## Phase 1.5 — sim-realism
 
-### `iafdb_bank` 1.3 — audit-report sidecar pointer
-
-Add an optional `run_record_path` field to `iafdb_bank` attrs so the healthy bank can carry a
-paired JSON sidecar of per-record diagnostics, symmetric with how `noise_bank` already pairs
-with `noise_bank_run_record`. The sidecar schema itself is either a new top-level
-`iafdb_bank_run_record` or a reuse of the `noise_bank_run_record` structure — decide during
-implementation. (`iafdb_bank` 1.2 was consumed by the v0.5.0 `bank_id` field, so this is 1.3.)
-
-> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5. Ships with
-> iafdb-pipeline's per-record audit reports + the egm-data sidecar reader/writer.
-
-### `noise_bank` 1.1 — `calibration_scalar` per-trace column (+ `bank_id` attr)
+### `noise_bank` — `calibration_scalar` per-trace column
 
 Add an optional `calibration_scalar` per-trace column so iafdb-pipeline's opt-in noise-side
 calibration can be expressed without breaking older readers (default NaN = uncalibrated;
-explicit scalar = gain applied before extraction). Batch in the **`bank_id` HDF5 attr** (+ a
-link to the run record) here too, so egm-studio's Noise view can read a noise bank's stable id
-from the `.h5` itself instead of the sibling run-record sidecar.
+explicit scalar = gain applied before extraction).
 
-> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 1.5. Pairs with
-> iafdb-pipeline's opt-in noise calibration; the `bank_id`-attr half is a refactor-cleanup
-> batch item (below).
+> → Pairs with iafdb-pipeline's opt-in noise calibration, which hasn't been scheduled. The
+> `bank_id` attr that used to be batched here **shipped in v0.6.0** (`noise_bank` 1.1); this
+> is the remaining half, and it would be `noise_bank` 1.2.
 
 ### `noise_bank_run_record` 1.2 — `per_trace_provenance.lead`
 
@@ -49,22 +36,10 @@ calibration's priority-order selection (when noise-side calibration is on). Ship
 
 ## Phase 2 — multiclass severity
 
-### Polymorphic `stimulation` schema (replace `stim_edge`)
-
-> **Pulled forward to Phase 1.5 (2026-07-23)** — SEP6 (multi-edge) + SEP7 (`PointStimulus` / `S1S2Protocol`)
-> need it; it's **Wave-1** of the 1.5 coordinated contracts bump (see
-> `intracardiac-platform/phases/phase_1_5/design.md` §5). The "Phase 2" framing below is superseded.
-
-`synthetic_bank` carries `stim_edge` as a single enum — fine for v1's one `PlanarEdgeStimulus`,
-but it doesn't extend to the richer activation sources scheduled into Phase 1.5 / 2 / 4
-(`PointStimulus`, `S1S2Protocol`, `PacingTrain`, multi-edge). Replace it with a polymorphic
-`stimulation` object (type discriminator + per-type params). **Coordinated release** —
-egm-contracts v0.6.0 + egm-data cascade + synthetic-egm-pipeline — bundled at the Phase 2
-first-publish inflection so the work doesn't fragment across releases (v0.5.0 was taken by the
-linkage wave). Migration noted in `schema_evolution.md`.
-
-> → Tracked at `intracardiac-platform/project/project_plan.md` Phase 2. Producer-side scope is
-> in synthetic-egm-pipeline's roadmap under "Additional activation sources."
+Nothing scheduled. Worth noting what Phase 2 will **not** need: multiclass severity labels
+require no schema change, because `LabelPolicy` takes an ascending `thresholds[]` array (N
+thresholds give N+1 classes) and `LabelNames` maps any number of labels. That was the point of
+generalizing them in v0.6.0 rather than shipping two binary policies.
 
 ## Phase 4 — feature banks (egm-features / Refactor Step 4)
 
@@ -184,24 +159,13 @@ stable id.
 > the v0.6.0 bump narrowed `ArtifactId` to the eight known roles (B16) without touching the
 > scheme's shape.
 
-### Align `HeldOutTest.metrics` to `EpochRecord.val_metrics`
-
-The `training_run_record` schema's `HeldOutTest.metrics` shape drifted slightly from
-`EpochRecord.val_metrics` during the v0.3.x training-side rewrite; both should carry the same
-scalar bundle (auroc, accuracy, f1, precision, recall, ece, confusion, reliability) so
-consumers render them with one code path. Additive alignment, no consumer breakage expected.
-Component-internal (was task #275); doesn't gate a phase.
-
 ### Refactor-cleanup batch (from the egm-studio B10g review)
 
-Three small, backward-compatible schema changes egm-studio deferred, to land together:
+One remaining item of the original three — the other two (`phase_manifest`
+`produced_by_*` optional, `noise_bank` `bank_id`) **shipped in v0.6.0**:
 
-- Make `produced_by_package` / `produced_by_version` **optional** on `phase_manifest` entries,
-  so egm-studio can index a manually-added producer artifact without sentinel values
-  (`"unknown"` / `"0"`).
 - Add an **active view / tab** field to the `observation` `view_state`, so *Open observation*
   can restore the active flow + sub-tab, not just banks + filter + selection.
-- The `noise_bank` **`bank_id` attr** (grouped with the `noise_bank` 1.1 work above).
 
 ### Normalization-scheme expansion (`robust_zscore`, `meanvar`)
 

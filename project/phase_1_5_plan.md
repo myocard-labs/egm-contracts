@@ -2,8 +2,10 @@
 
 **Repo:** egm-contracts · **Phase:** 1.5
 **Phase design doc:** `intracardiac-platform/phases/phase_1_5/design.md`
-**Status:** in progress · **Progress:** 12/13 steps done (S1–S11) — the whole v0.6.0 schema surface is
-built. Remaining: **S12** (phase-exit docs + the pre-PR run).
+**Status:** **implementation complete** · **Progress:** 13/13 steps done (S1–S12) — v0.6.0 is ready
+to open as a PR. What remains is Daniel's: open/review/merge in the web UI **with the
+`skip-schema-bump` label**, then tag `v0.6.0` on `release`. That tag unblocks egm-data, and the four
+Wave-1 adoptions behind it.
 **Repo estimate:** **14–29.5 h** active (Cx **15** points) — the project-lead reads this into design §6;
 this chat does not edit the design doc.
 
@@ -58,8 +60,9 @@ are all gated on the tag. That makes S12 (the pre-PR run) the wave's real bottle
 
 | Item | Kind | Blocked on | Status |
 |---|---|---|---|
-| **S12** — phase-exit docs (roadmap trim, README) + the full pre-PR run | step | — | open |
-| PR needs the `skip-schema-bump` label (`phase_manifest` changed without a version move) | blocker-at-PR | — | open |
+| Open + merge the v0.6.0 PR **with the `skip-schema-bump` label**, then tag `v0.6.0` on `release` | handoff | Daniel (web UI) | open |
+| Notify the project-lead once tagged, so the linkage doc's Proposed-changes P1–P6 fold into the canonical sections | handoff | — | open |
+| ~~S1–S12~~ | step | — | **all done** 2026-07-30 |
 | ~~Confirm the `oneOf` + `const` discriminator codegens cleanly~~ | open-question | — | **closed** (S7 probe: emits a proper Pydantic tagged union) |
 
 No cross-chat blockers: B17 was answered (CL-051), the join key needs no CON change (CL-012 → CL-024
@@ -286,7 +289,7 @@ Every step ends green: `ruff format src tests` → `ruff check src tests` → `m
   schema (read the diff against the schema side by side).
 - **Depends on:** S10.
 
-### S12 — Phase-exit docs + PR ☐ (1–2 h)
+### S12 — Phase-exit docs + PR ✅ (1–2 h)
 - **Change:** `CHANGELOG.md` `[Unreleased]` → the v0.6.0 entry naming all six groups and the
   `schema_version`s; `roadmap.md` trimmed of everything shipped (the `iafdb_bank` 1.3 section, the
   `bank_id` half of `noise_bank` 1.1, the pulled-forward `stimulation` section, the `HeldOutTest`
@@ -364,6 +367,15 @@ restructure really did dwarf the XS additive ones. Worth a look when the method 
   `simulation_id`, egm-data adds a writer check. (4) **P3's egm-data half is already shipped**, so P3 is
   the B16 validator here + a content check there. (5) **Effort rule (§5b):** planning sessions count
   toward issue Actuals — **superseded same day, see below.**
+- **2026-07-30** — *S12: implementation complete.* Roadmap trimmed of everything shipped (the
+  `iafdb_bank` 1.3 section, the `bank_id` half of `noise_bank` 1.1, the Phase-2 `stimulation` section,
+  the `HeldOutTest` backlog item, two of the three refactor-cleanup bullets); Phase 2 now records what
+  it will **not** need — multiclass severity requires no schema change, which is what generalizing
+  `thresholds[]` bought. README schema table gained the three shared-`$defs` files. Package version
+  0.5.3 → **0.6.0**, CHANGELOG `[Unreleased]` → a dated release naming every schema version in it.
+  **Pre-PR run green:** ruff, mypy, 148 tests, codegen no-drift, and the schema-version checker
+  reporting 5 correct BUMPED/NEW lines plus the one expected `phase_manifest` DRIFT — the justification
+  for the label.
 - **2026-07-30** — *S9–S11 shipped together.* S9 (schema) could not end green on its own — changing
   `synthetic_bank` invalidates the fixture — so the validator rewrite and the 2.0 fixture came with
   it, which was S10's scope. Two things the plan didn't anticipate: (1) the validator gained a
