@@ -270,6 +270,31 @@ introduction version.
 - **1.0** — egm-contracts v0.3.0. Initial release of this schema
   (renamed from `model_metadata`).
 
+### phase_manifest
+
+- **(v0.6.0, `schema_version` unchanged at `1`)** — two backward-compatible
+  changes, both Phase-1.5 Wave 1:
+  - **`produced_by_package` / `produced_by_version` dropped from every entry's
+    `required` array** (B19) — all seven entry types (`EgmBankEntry`,
+    `NoiseBankEntry`, `TrainingRunEntry`, `ModelEntry`, `ObservationEntry`,
+    `FigureEntry`, `PaperEntry`). The curator can index an artifact whose
+    producer isn't knowable; the old requirement forced `"unknown"` / `"0"`
+    sentinels that were indistinguishable from a genuine stamp. `id` + `path`
+    stay required — an entry is a pointer, and one without a path points
+    nowhere.
+  - **`path` descriptions corrected** on all seven entries: paths are relative
+    to the **phase folder**, not the meta repo. `EgmBankEntry` said "relative
+    to the meta repo (or absolute)", which became wrong under egm-studio's
+    phase-storage work (B17); the other six carried no description at all. No
+    structural change — `path` is still an unconstrained string, so the
+    convention is enforced by the validator script rather than the schema
+    (CL-051).
+  - **No `schema_version` bump:** loosening `required` and editing descriptions
+    are both backward-compatible, and this schema is major-only (enum-of-one).
+    Note the consequence for CI — `check_schema_versions.py` sees a changed
+    schema whose version didn't move and flags DRIFT, so the PR carrying this
+    needs the `skip-schema-bump` label.
+
 ### iafdb_bank
 
 - **1.3** — egm-contracts v0.6.0. Two optional additions, both Phase-1.5 Wave 1:

@@ -25,6 +25,14 @@ Phase-1.5 Wave 1 — the coordinated **v0.6.0** schema bump. Accumulating; ships
   required-on-write in activation mode: Wave-1 banks are written before the splitters populate
   it.
 
+- **`phase_manifest` — `produced_by_*` optional; `path` is phase-folder-relative.** The
+  producer fields left every entry type's `required` array (B19), so the curator can index a
+  hand-added or externally-produced artifact instead of stamping `"unknown"` / `"0"` sentinels
+  that read like real provenance; `id` + `path` stay required. The `path` descriptions were
+  corrected across all seven entry types — `EgmBankEntry` claimed "relative to the meta repo",
+  which phase-storage made wrong, and the other six had no description (B17 / CL-051). Both
+  changes are backward-compatible, so `schema_version` stays `"1"`.
+
 - **`iafdb_bank` 1.3 — `run_record_path` + per-trace `activation_position`.** The first is a
   relative pointer to a sibling JSON run record of extraction diagnostics (B11), shipped unset
   in Wave 1 — the generator that fills it is Wave-2 work, and the record's own schema stays

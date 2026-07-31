@@ -2,7 +2,7 @@
 
 **Repo:** egm-contracts · **Phase:** 1.5
 **Phase design doc:** `intracardiac-platform/phases/phase_1_5/design.md`
-**Status:** in progress · **Progress:** 4/13 steps done (S1 · S2 · S3 · S4)
+**Status:** in progress · **Progress:** 5/13 steps done (S1 · S2 · S3 · S4 · S5)
 **Repo estimate:** **14–29.5 h** active (Cx **15** points) — the project-lead reads this into design §6;
 this chat does not edit the design doc.
 
@@ -155,7 +155,7 @@ Every step ends green: `ruff format src tests` → `ruff check src tests` → `m
   still validates (the Wave-1 case); docs page updated.
 - **Depends on:** S2.
 
-### S5 — `phase_manifest` — `produced_by_*` optional (B19) ☐ (0.5–1.5 h)
+### S5 — `phase_manifest` — `produced_by_*` optional (B19) ✅ (0.5–1.5 h)
 - **Change:** remove `produced_by_package` + `produced_by_version` from the `required` array of all
   seven entry `$defs` (`EgmBankEntry`, `NoiseBankEntry`, `TrainingRunEntry`, `ModelEntry`,
   `ObservationEntry`, `FigureEntry`, `PaperEntry`), keeping them as optional properties.

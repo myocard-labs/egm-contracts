@@ -37,10 +37,21 @@ Every entry carries only:
 
 - `id` — the artifact's stable cross-artifact id (the ArtifactId /
   FigureId / PaperId patterns, defined once in `common.schema.json`).
-- `path` — where the artifact lives, relative to the meta repo.
-- `produced_by_package` + `produced_by_version` — provenance, on **every**
-  entry type (even observations/figures, whose producer is egm-studio —
-  the version matters if the saved view-state format changes).
+- `path` — where the artifact lives, **relative to the phase folder** this
+  manifest sits in (e.g. `banks/tbank_synthetic_v1_5.h5`). In-phase artifacts
+  are copied under the phase folder and recorded relatively, so the folder is
+  self-contained and can be moved or archived whole. An artifact that genuinely
+  lives elsewhere may still be recorded absolutely, at the cost of tying the
+  manifest to one machine.
+- `produced_by_package` + `produced_by_version` — provenance, available on
+  **every** entry type (even observations/figures, whose producer is
+  egm-studio — the version matters if the saved view-state format changes).
+  **Optional since egm-contracts v0.6.0:** the curator can index an artifact
+  whose producer isn't knowable — hand-added files, externally produced data,
+  anything predating the convention. Previously these were required, so such
+  entries carried `"unknown"` / `"0"` sentinels that read exactly like a real
+  producer stamp. Producers still fill both; absence now means "nobody knows",
+  which is the truthful answer.
 - relationship references to other artifacts, as id strings.
 - optional `usage_tag` / `usage_notes` (observations + figures).
 - optional `download_url` (banks + models), filled at **release time**,
