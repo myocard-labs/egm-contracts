@@ -2,8 +2,8 @@
 
 **Repo:** egm-contracts · **Phase:** 1.5
 **Phase design doc:** `intracardiac-platform/phases/phase_1_5/design.md`
-**Status:** in progress · **Progress:** 8/13 steps done (S1–S6, S6b, S7) — additive work complete;
-**egm-data's S10 is unblocked**. Remaining: S8 (θ-spec) · S9–S11 (`synthetic_bank` 2.0) · S12 (PR)
+**Status:** in progress · **Progress:** 9/13 steps done (S1–S6, S6b, S7, S8) — additive work complete
+and **egm-data's S10 is unblocked**. Remaining: S9–S11 (`synthetic_bank` 2.0) · S12 (PR)
 **Repo estimate:** **14–29.5 h** active (Cx **15** points) — the project-lead reads this into design §6;
 this chat does not edit the design doc.
 
@@ -233,7 +233,7 @@ Every step ends green: `ruff format src tests` → `ruff check src tests` → `m
   ugly); drift check clean.
 - **Depends on:** S2.
 
-### S8 — `TunedParam` + `generation_params` θ-spec ☐ (1–2 h)
+### S8 — `TunedParam` + `generation_params` θ-spec ✅ (1–2 h)
 - **Change:** add to `simulation_config.schema.json`: `TunedParam {path, bounds[2], transform:
   identity|log|logit, role: label_param|nuisance, nominal?}` and `generation_params {regime,
   knobs:[TunedParam]}` — membership deliberately open (set per sweep by the §8.2 screening), shape
@@ -362,6 +362,16 @@ restructure really did dwarf the XS additive ones. Worth a look when the method 
   `simulation_id`, egm-data adds a writer check. (4) **P3's egm-data half is already shipped**, so P3 is
   the B16 validator here + a content check there. (5) **Effort rule (§5b):** planning sessions count
   toward issue Actuals — **superseded same day, see below.**
+- **2026-07-30** — *S8 review (Daniel) → θ-spec moved to its own schema.* I had put `TunedParam` +
+  `GenerationParams` in `simulation_config.schema.json`, which is a **scope error**: that file is
+  per-simulation by name, title and description, while the θ-spec is **bank/sweep-scoped** — the
+  investigation puts it at root attrs (`generation_params_json`), not in the `simulations/` group.
+  Now `generation_params.schema.json`, with the scope distinction stated in both files' descriptions
+  and a test asserting neither def leaks back into `simulation_config`. The two stay independent:
+  `TunedParam.path` is an opaque string pointing into the per-sim config, not a `$ref`. **Doesn't
+  contradict the earlier one-file decision** — that was about the seven per-function objects, all of
+  which are genuinely per-simulation. **S9 note:** `synthetic_bank` therefore `$ref`s *two* schemas —
+  `simulation_config` for the `simulations/` columns, `generation_params` for the root attr.
 - **2026-07-30** — *S7 review (Daniel) → three changes.* (1) **`ActivationSite` / `EdgeStripSite`
   / `PointSite` deleted.** Daniel: duplicating the location fields is worse than nesting an
   activation and ignoring a timing field. `S1S2Activation.site` now `$ref`s a new
