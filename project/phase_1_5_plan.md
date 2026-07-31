@@ -2,9 +2,8 @@
 
 **Repo:** egm-contracts · **Phase:** 1.5
 **Phase design doc:** `intracardiac-platform/phases/phase_1_5/design.md`
-**Status:** in progress · **Progress:** 7/13 steps done (S1–S6, S6b) — **egm-data's S10 is
-unblocked** (the `train_*` CSV columns landed); the `synthetic_bank` restructure (S7–S11) is what
-remains
+**Status:** in progress · **Progress:** 8/13 steps done (S1–S6, S6b, S7) — additive work complete;
+**egm-data's S10 is unblocked**. Remaining: S8 (θ-spec) · S9–S11 (`synthetic_bank` 2.0) · S12 (PR)
 **Repo estimate:** **14–29.5 h** active (Cx **15** points) — the project-lead reads this into design §6;
 this chat does not edit the design doc.
 
@@ -219,7 +218,7 @@ Every step ends green: `ruff format src tests` → `ruff check src tests` → `m
   won't add to S5's label problem.
 - **Depends on:** S2.
 
-### S7 — `simulation_config.schema.json` — the per-function objects ☐ (2.5–5 h)
+### S7 — `simulation_config.schema.json` — the per-function objects ✅ (2.5–5 h)
 - **Change:** new schema file holding the seven `type`-discriminated `$defs` with their Phase-1.5
   variants: `geometry.patch2d {size_mm, dr_mm}`; `cell_model.courtemanche {params}` +
   `aliev_panfilov {ap_time_unit_ms, …}`; `substrate.uniform_random {density}`;
@@ -363,6 +362,33 @@ restructure really did dwarf the XS additive ones. Worth a look when the method 
   `simulation_id`, egm-data adds a writer check. (4) **P3's egm-data half is already shipped**, so P3 is
   the B16 validator here + a content check there. (5) **Effort rule (§5b):** planning sessions count
   toward issue Actuals — **superseded same day, see below.**
+- **2026-07-30** — *S7 review (Daniel) → three changes.* (1) **`ActivationSite` / `EdgeStripSite`
+  / `PointSite` deleted.** Daniel: duplicating the location fields is worse than nesting an
+  activation and ignoring a timing field. `S1S2Activation.site` now `$ref`s a new
+  **`SingleShotActivation`** union (planar_edge | point) — no duplicate fields, and excluding
+  protocol variants from that union is what stops a protocol nesting a protocol (tested). Net −3
+  `$defs`. (2) **Label policies generalized** (Daniel's call): `threshold` → ascending
+  **`thresholds[]`** (N thresholds = N+1 classes; binary is one element), and
+  `healthy_name`/`fibrotic_name` dropped — `LabelNames` already names any number of classes, so
+  those fields were the same information in a second place. Phase-2 multiclass severity now needs
+  no new variant and no contracts bump. **Producer-visible:** SEP12 writes `[0.1]` and stops
+  writing the two name fields — cheapest to change now, before SEP12 is built. (3)
+  **`SubstrateSummary` watch note** added in-schema: one flat object works while uniform-random is
+  the only substrate, but interstitial / patchy / compact have genuinely different summaries and
+  it likely becomes a discriminated union then.
+- **2026-07-30** — *S7 built; two decisions worth recording.* (1) **Discriminator encoding
+  verified before committing to it** — a scratch codegen probe confirmed `oneOf` + `const` + a
+  `discriminator` annotation emits a proper Pydantic tagged union (`A | B` with
+  `discriminator="type"`), so the Design-notes fallback was never needed. (2) **Field names taken
+  from the producer, not the investigation sketch** — `specs.py` has `patch_2d` (not `patch2d`),
+  `uniform_random_fibrosis` (not `uniform_random`), `n_rows`/`n_cols` (not `rows`/`cols`), and a
+  realized `height_mm` rather than a configured `height_mm_range`. The schema mirrors the
+  producer, since a rename in either is now a coordinated change. **One deliberate divergence:**
+  `planar_edge.edges` is a list where the producer's dataclass has a single `edge` — today's
+  behavior is the one-element list, so SEP6's multi-edge feature needs no contracts bump in the
+  feature wave. **`S1S2Activation` is marked provisional in-schema** — SEP7 hasn't built it, so
+  its field set is my reading of the protocol; flagged for confirmation rather than presented as
+  settled.
 - **2026-07-30** — *S3 review (Daniel) → two backlog items, neither fixed in 1.5.* (1) **Codegen
   emits unused `common` `$defs`** into every model module (`noise_bank.py` carries `FigureId` /
   `PaperId` / `ActivationPosition`). Cause: one generator run per schema file, each re-emitting
