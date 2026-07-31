@@ -270,6 +270,30 @@ introduction version.
 - **1.0** — egm-contracts v0.3.0. Initial release of this schema
   (renamed from `model_metadata`).
 
+### training_metrics
+
+- **(v0.6.0, no `schema_version` — a CSV row has nowhere to carry one)** —
+  added the six nullable `train_*` columns (`train_auroc` / `train_accuracy` /
+  `train_precision` / `train_recall` / `train_f1` / `train_ece`), mirroring
+  their `val_*` twins, plus a rewritten `x-csv-column-order` that **pairs the
+  blocks**: `epoch, lr, train_loss, train_*, val_loss, val_*, epoch_seconds`.
+  Appending the train block after the val block was the smaller edit and was
+  rejected — the reason for carrying both splits is reading their divergence,
+  which a spreadsheet makes obvious only when the pairs are adjacent, and the
+  schema already tells consumers to read by header name so reordering is safe.
+  - **Why it couldn't wait:** the schema is `additionalProperties: false`, so
+    an un-bumped validator actively *rejects* a CSV carrying the new columns.
+    The columns had to exist here before any producer could emit them, which
+    is why this landed in v0.6.0 rather than alongside the emit (CL-037 →
+    CL-024).
+  - `required` is unchanged — the new columns are nullable and absent from
+    CSVs written before the producer emitted them.
+  - **Not added:** `train_reliability` bins. The CSV carries scalars only and
+    ECE is already the scalar summary of those bins (feature backlog FB-10).
+  - **CI note:** with no `schema_version` to compare, `check_schema_versions.py`
+    classifies this file as NEW rather than DRIFT, so it does not add to the
+    `skip-schema-bump` requirement `phase_manifest` already creates.
+
 ### training_run_record
 
 - **1.2** — egm-contracts v0.6.0. Phase-1.5 Wave 1; two schema changes + two

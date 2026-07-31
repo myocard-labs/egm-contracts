@@ -2,7 +2,9 @@
 
 **Repo:** egm-contracts · **Phase:** 1.5
 **Phase design doc:** `intracardiac-platform/phases/phase_1_5/design.md`
-**Status:** in progress · **Progress:** 6/13 steps done (S1 · S2 · S3 · S4 · S5 · S6)
+**Status:** in progress · **Progress:** 7/13 steps done (S1–S6, S6b) — **egm-data's S10 is
+unblocked** (the `train_*` CSV columns landed); the `synthetic_bank` restructure (S7–S11) is what
+remains
 **Repo estimate:** **14–29.5 h** active (Cx **15** points) — the project-lead reads this into design §6;
 this chat does not edit the design doc.
 
@@ -199,7 +201,7 @@ Every step ends green: `ruff format src tests` → `ruff check src tests` → `m
   field to cover the populated path.
 - **Depends on:** S2.
 
-### S6b — `training_metrics` — the six `train_*` CSV columns ☐ (0.5–1.5 h)
+### S6b — `training_metrics` — the six `train_*` CSV columns ✅ (0.5–1.5 h)
 - **Change:** add `train_auroc` / `train_accuracy` / `train_precision` / `train_recall` / `train_f1` /
   `train_ece` — all `["number", "null"]`, optional, mirroring their `val_*` twins' bounds and
   null-semantics — and rewrite `x-csv-column-order` **paired** (`epoch, lr, train_loss,

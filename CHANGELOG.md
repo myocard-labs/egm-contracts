@@ -25,6 +25,16 @@ Phase-1.5 Wave 1 — the coordinated **v0.6.0** schema bump. Accumulating; ships
   required-on-write in activation mode: Wave-1 banks are written before the splitters populate
   it.
 
+- **`training_metrics` — six nullable `train_*` CSV columns.** `train_auroc` / `train_accuracy`
+  / `train_precision` / `train_recall` / `train_f1` / `train_ece`, mirroring their `val_*`
+  twins, with `x-csv-column-order` rewritten to **pair** the blocks (`epoch, lr, train_loss,
+  train_*, val_loss, val_*, epoch_seconds`) rather than append train at the end — the point of
+  carrying both is reading their divergence, which only reads clearly when the pairs are
+  adjacent. The schema is `additionalProperties: false`, so an un-bumped validator actively
+  rejects a CSV carrying these columns; they had to land before any producer could emit them,
+  which is why this is in v0.6.0 rather than with the emit (CL-037). No `schema_version` — a
+  CSV row has nowhere to put one. `train_reliability` bins stay out of scope (FB-10).
+
 - **`training_run_record` 1.2 — per-epoch `train_metrics` + `HeldOutTest` parity.**
   `EpochRecord.train_metrics` mirrors `val_metrics`, making train-vs-val divergence readable
   from the record (with validation metrics alone, overfitting and a hard task look the same).
