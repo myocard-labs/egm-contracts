@@ -154,46 +154,140 @@ def valid_noise_bank_run_record(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def valid_synthetic_bank(tmp_path: Path) -> Path:
-    """Write a tiny valid synthetic bank to a temp file and return its path."""
-    path = tmp_path / "synthetic_v1.h5"
+    """Write a tiny valid synthetic_bank 2.0 to a temp file and return its path.
+
+    Two simulations, two traces each, in the shape the Phase-1.5 Wave-1
+    migration produces: today's behavior (one planar-edge stimulus, uniform
+    random fibrosis, a density label) expressed through the restructured
+    schema, with a theta-spec that records the regime and an empty knob list
+    because nothing was swept.
+    """
+    path = tmp_path / "synthetic_v2.h5"
     str_dtype = h5py.string_dtype(encoding="utf-8")
-    n = 2
-    T = 200
+    n_sims = 2
+    n_traces = 4
+    trace_len = 192
+
+    def _pairs(height_mm: float) -> list[dict[str, Any]]:
+        return [
+            {
+                "pair_index": i,
+                "electrode_indices": [i, i + 1],
+                "electrode_row": 0,
+                "height_mm": height_mm,
+                "midpoint_mm": [17.0 + 2.0 * i, 16.0],
+            }
+            for i in range(2)
+        ]
+
+    heights = [0.5, 0.8]
+    densities = [0.05, 0.35]
+    realized = [0.048, 0.352]
+    labels = [0, 1]  # global-density policy at threshold 0.1
+
+    def _col(values: list[Any]) -> np.ndarray:
+        return np.array([json.dumps(v) for v in values], dtype=object)
 
     with h5py.File(path, "w") as f:
         f.attrs["schema_version"] = current_version("synthetic_bank")
-        f.attrs["created_utc"] = "2026-06-15T22:00:00Z"
+        f.attrs["created_utc"] = "2026-07-30T22:00:00Z"
         f.attrs["description"] = "tiny test fixture"
         f.attrs["fs_hz"] = 1000.0
-        f.attrs["trace_duration_ms"] = 200.0
-        f.attrs["simulator"] = "finitewave"
-        f.attrs["cell_model"] = "aliev_panfilov"
-        f.attrs["patch_size_mm"] = 40.0
-        f.attrs["patch_dr_mm"] = 0.25
-        f.attrs["ap_time_unit_ms"] = 1.0
-        f.attrs["fibrosis_strategy_name"] = "uniform_random"
-        f.attrs["fibrosis_params_json"] = json.dumps({"density_range": [0.0, 0.5]})
-        f.attrs["electrode_config_json"] = json.dumps({"grid_shape": [5, 5]})
-        f.attrs["mixer_config_json"] = json.dumps({"enabled": False})
-        f.attrs["experiment_config_json"] = json.dumps({"n_simulations": 1})
+        f.attrs["trace_duration_ms"] = float(trace_len)
         f.attrs["noise_bank_source"] = ""
+        f.attrs["generation_params_json"] = json.dumps(
+            {
+                "regime": {
+                    "geometry": "patch_2d",
+                    "cell_model": "aliev_panfilov",
+                    "substrate": "uniform_random_fibrosis",
+                    "activation": "planar_edge",
+                    "electrodes": "centered_grid_2d",
+                    "backend": "finitewave",
+                    "label_policy": "global_density",
+                },
+                "knobs": [],
+            }
+        )
+
+        sims = f.create_group("simulations")
+        sims.create_dataset("simulation_id", data=np.arange(n_sims, dtype=np.int64))
+        sims.create_dataset("seed", data=np.array([42, 43], dtype=np.int64))
+        sims.create_dataset(
+            "geometry_json",
+            data=_col([{"type": "patch_2d", "size_mm": 40.0, "dr_mm": 0.25}] * n_sims),
+            dtype=str_dtype,
+        )
+        sims.create_dataset(
+            "cell_model_json",
+            data=_col([{"type": "aliev_panfilov", "ap_time_unit_ms": 12.9}] * n_sims),
+            dtype=str_dtype,
+        )
+        sims.create_dataset(
+            "substrate_json",
+            data=_col([{"type": "uniform_random_fibrosis", "density": d} for d in densities]),
+            dtype=str_dtype,
+        )
+        sims.create_dataset(
+            "substrate_summary_json",
+            data=_col([{"realized_density": r} for r in realized]),
+            dtype=str_dtype,
+        )
+        sims.create_dataset(
+            "activation_json",
+            data=_col([{"type": "planar_edge", "edges": ["top"], "voltage": 1.0}] * n_sims),
+            dtype=str_dtype,
+        )
+        sims.create_dataset(
+            "electrodes_json",
+            data=_col(
+                [
+                    {
+                        "type": "centered_grid_2d",
+                        "n_rows": 5,
+                        "n_cols": 5,
+                        "spacing_mm": 2.0,
+                        "height_mm": h,
+                        "pairs": _pairs(h),
+                    }
+                    for h in heights
+                ]
+            ),
+            dtype=str_dtype,
+        )
+        sims.create_dataset(
+            "backend_json",
+            data=_col(
+                [{"type": "finitewave", "output_fs_hz": 1000.0, "capture_oversample": 4}] * n_sims
+            ),
+            dtype=str_dtype,
+        )
+        sims.create_dataset(
+            "label_policy_json",
+            data=_col([{"type": "global_density", "thresholds": [0.1]}] * n_sims),
+            dtype=str_dtype,
+        )
+        sims.create_dataset(
+            "label_names_json",
+            data=_col([{"0": "healthy", "1": "fibrotic"}] * n_sims),
+            dtype=str_dtype,
+        )
 
         g = f.create_group("traces")
-        g.create_dataset("signal", data=np.zeros((n, T), dtype=np.float32))
-        g.create_dataset("simulation_id", data=np.array([0, 0], dtype=np.int64))
-        g.create_dataset("pair_index", data=np.array([0, 1], dtype=np.int64))
-        g.create_dataset("electrode_row", data=np.array([0, 0], dtype=np.int64))
-        g.create_dataset("fibrosis_density", data=np.array([0.3, 0.3], dtype=np.float64))
+        g.create_dataset("signal", data=np.zeros((n_traces, trace_len), dtype=np.float32))
+        g.create_dataset("simulation_id", data=np.array([0, 0, 1, 1], dtype=np.int64))
+        g.create_dataset("pair_index", data=np.array([0, 1, 0, 1], dtype=np.int64))
         g.create_dataset(
-            "fibrosis_density_realized",
-            data=np.array([0.29, 0.31], dtype=np.float64),
+            "label",
+            data=np.array([labels[0], labels[0], labels[1], labels[1]], dtype=np.int64),
         )
-        g.create_dataset("electrode_height_mm", data=np.array([0.5, 0.5], dtype=np.float64))
-        g.create_dataset("seed", data=np.array([42, 42], dtype=np.int64))
-        g.create_dataset("snr_db", data=np.array([float("nan"), float("nan")], dtype=np.float64))
-        g.create_dataset("stim_edge", data=np.array(["top", "top"], dtype=object), dtype=str_dtype)
-        g.create_dataset("noise_record", data=np.array(["", ""], dtype=object), dtype=str_dtype)
-        g.create_dataset("noise_channel", data=np.array(["", ""], dtype=object), dtype=str_dtype)
+        g.create_dataset("snr_db", data=np.full(n_traces, np.nan, dtype=np.float64))
+        g.create_dataset(
+            "noise_record", data=np.array([""] * n_traces, dtype=object), dtype=str_dtype
+        )
+        g.create_dataset(
+            "noise_channel", data=np.array([""] * n_traces, dtype=object), dtype=str_dtype
+        )
     return path
 
 

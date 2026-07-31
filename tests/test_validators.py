@@ -110,6 +110,131 @@ def test_synthetic_bank_validates(valid_synthetic_bank: Path) -> None:
     assert result.ok, result.issues
 
 
+# ---------------------------------------------------------------------------
+# synthetic_bank 2.0 — the restructured layout
+# ---------------------------------------------------------------------------
+
+
+def test_synthetic_bank_rejects_a_1_1_shaped_bank(valid_synthetic_bank: Path) -> None:
+    """2.0 moved fields rather than adding them, so a 1.1 bank must be REFUSED
+    rather than partially read.
+
+    A reader that limped along on the old shape would silently lose the
+    generation config — the thing the restructure exists to preserve. There is
+    no migration path by design (no released work depends on a 1.1 bank), so
+    this rejection is the whole back-compat story.
+    """
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        del f["simulations"]
+        del f["traces"]["label"]
+        g = f["traces"]
+        n = g["signal"].shape[0]
+        g.create_dataset("fibrosis_density", data=np.full(n, 0.3, dtype=np.float64))
+        g.create_dataset(
+            "stim_edge",
+            data=np.array(["top"] * n, dtype=object),
+            dtype=h5py.string_dtype(encoding="utf-8"),
+        )
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("simulations" in i or "fibrosis_density" in i for i in result.issues), result.issues
+
+
+def test_synthetic_bank_rejects_an_orphan_simulation_id(valid_synthetic_bank: Path) -> None:
+    """The trace → simulation foreign key is what holds 2.0 together, and JSON
+    Schema cannot express a reference between two sibling groups — so the
+    validator checks it directly. An orphan is a trace whose generation config
+    can't be recovered, which is exactly the failure the restructure prevents.
+    """
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        ids = f["traces"]["simulation_id"][...]
+        ids[-1] = 99
+        f["traces"]["simulation_id"][...] = ids
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("99" in i and "simulation_id" in i for i in result.issues), result.issues
+
+
+def test_synthetic_bank_rejects_a_bad_config_object(valid_synthetic_bank: Path) -> None:
+    """Each per-sim column is an opaque JSON string on disk; decoding and
+    validating it against its typed $ref is the only thing standing between a
+    malformed config and a bank that looks fine until someone reads it."""
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        del f["simulations"]["activation_json"]
+        f["simulations"].create_dataset(
+            "activation_json",
+            data=np.array([json.dumps({"type": "stim_edge", "edge": "top"})] * 2, dtype=object),
+            dtype=h5py.string_dtype(encoding="utf-8"),
+        )
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("activation" in i for i in result.issues), result.issues
+
+
+def test_synthetic_bank_rejects_malformed_json_in_a_config_column(
+    valid_synthetic_bank: Path,
+) -> None:
+    """A truncated write shouldn't crash the reader. The row stays a string and
+    the validator reports a type error against the column, which localizes the
+    problem better than a JSONDecodeError from inside the loader."""
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        del f["simulations"]["geometry_json"]
+        f["simulations"].create_dataset(
+            "geometry_json",
+            data=np.array(['{"type": "patch_2d", "size_mm"'] * 2, dtype=object),
+            dtype=h5py.string_dtype(encoding="utf-8"),
+        )
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("geometry" in i for i in result.issues), result.issues
+
+
+def test_synthetic_bank_rejects_a_float_label(valid_synthetic_bank: Path) -> None:
+    """The label is an int by contract — that is what keeps the classifier's
+    input stable across binary, multiclass and any future label family. A float
+    label means a producer wrote the density it was derived from, the 1.1
+    conflation this restructure removed."""
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        n = f["traces"]["label"].shape[0]
+        del f["traces"]["label"]
+        f["traces"].create_dataset("label", data=np.full(n, 0.35, dtype=np.float64))
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("label" in i for i in result.issues), result.issues
+
+
+def test_synthetic_bank_without_activation_position_validates(
+    valid_synthetic_bank: Path,
+) -> None:
+    """Wave-1 banks have no controlled crop, so the column is absent — the
+    synthetic half of the same wave-boundary assertion iafdb_bank carries."""
+    with h5py.File(valid_synthetic_bank, "r") as f:
+        assert "activation_position" not in f["traces"]
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert result.ok, result.issues
+
+
+def test_synthetic_bank_with_activation_position_validates(valid_synthetic_bank: Path) -> None:
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        n = f["traces"]["signal"].shape[0]
+        f["traces"].create_dataset(
+            "activation_position", data=np.linspace(0.0, 1.0, n, dtype=np.float32)
+        )
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert result.ok, result.issues
+
+
+def test_synthetic_bank_requires_a_theta_spec(valid_synthetic_bank: Path) -> None:
+    """Even an unswept bank states its regime. Without it, a bank cannot say
+    what structural setup it represents, and a recovered parameter region is
+    only interpretable inside its regime."""
+    with h5py.File(valid_synthetic_bank, "r+") as f:
+        del f.attrs["generation_params_json"]
+    result = validate_synthetic_bank(valid_synthetic_bank)
+    assert not result
+    assert any("generation_params" in i for i in result.issues), result.issues
+
+
 def test_training_run_record_validates(valid_training_run_record: Path) -> None:
     result = validate_training_run_record(valid_training_run_record)
     assert result.ok, result.issues
