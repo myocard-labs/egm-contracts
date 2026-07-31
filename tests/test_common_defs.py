@@ -55,6 +55,22 @@ def test_activation_position_rejects_non_numeric() -> None:
         jsonschema.Draft202012Validator(_activation_position_def()).validate("0.5")
 
 
+def test_run_record_no_longer_advertises_host() -> None:
+    """B15 is convention-only — there is no `host` field to delete, just the
+    well-known-key list that told producers to write one. The list *is* the
+    contract, so this guards it: a future edit that reinstates the key would
+    otherwise be invisible to every other test in the suite.
+    """
+    run_desc = get_schema("training_run_record")["properties"]["run"]["description"]
+    # The description has two parts: the well-known-key list, then a NOTE
+    # explaining the removal. `host` must be absent from the first and named
+    # in the second — checking the whole string would pass on either.
+    key_list, _, removal_note = run_desc.partition("NOTE (1.2)")
+    assert removal_note, "the 1.2 removal note is gone from the run description"
+    assert "'host'" not in key_list, "host is back in the well-known run keys"
+    assert "SHOULD NOT" in removal_note, "the note no longer tells producers to omit it"
+
+
 def test_activation_position_not_redefined_locally() -> None:
     """Single-source guard, the same rule the ID patterns follow.
 

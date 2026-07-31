@@ -114,6 +114,67 @@ def test_training_run_record_validates(valid_training_run_record: Path) -> None:
     assert result.ok, result.issues
 
 
+def test_run_record_without_train_metrics_validates(valid_training_run_record: Path) -> None:
+    """1.2 adds `train_metrics` optional-in-schema, and this is the assertion
+    that keeps it that way.
+
+    Wave 1 (CLF5) adopts the schema; Wave 2 (CLF2) adds the emit. If this field
+    were required, every record written in between would fail validation and
+    the emit work would be pulled into the migration wave — collapsing exactly
+    the split the wave structure exists to protect.
+    """
+    doc = json.loads(valid_training_run_record.read_text())
+    assert "train_metrics" not in doc["epochs"][0]
+    result = validate_training_run_record(valid_training_run_record)
+    assert result.ok, result.issues
+
+
+def test_run_record_with_train_metrics_validates(valid_training_run_record: Path) -> None:
+    """The populated path: the same bundle shape as val_metrics, nested
+    confusion included."""
+    doc = json.loads(valid_training_run_record.read_text())
+    doc["epochs"][0]["train_metrics"] = {
+        "auroc": 0.93,
+        "accuracy": 0.9,
+        "precision": 0.91,
+        "recall": 0.88,
+        "f1": 0.89,
+        "ece": 0.04,
+        "confusion": {"tp": 45, "fp": 5, "tn": 40, "fn": 10},
+    }
+    valid_training_run_record.write_text(json.dumps(doc))
+    result = validate_training_run_record(valid_training_run_record)
+    assert result.ok, result.issues
+
+
+def test_held_out_test_accepts_the_val_metrics_bundle(valid_training_run_record: Path) -> None:
+    """B18 parity, stated as the case that used to fail.
+
+    Before 1.2, HeldOutTest.metrics admitted only flat scalars, so a producer
+    writing the *same* bundle it writes per-epoch — which carries a nested
+    `confusion` — had its test block rejected while its epochs passed. Feeding
+    the val bundle straight into the test block is therefore the sharpest test
+    of the alignment.
+    """
+    doc = json.loads(valid_training_run_record.read_text())
+    bundle = {
+        "auroc": 0.87,
+        "accuracy": 0.83,
+        "f1": 0.81,
+        "ece": 0.05,
+        "confusion": {"tp": 40, "fp": 8, "tn": 38, "fn": 14},
+    }
+    doc["epochs"][0]["val_metrics"] = bundle
+    doc["test"] = {
+        "loss": 0.42,
+        "metrics": bundle,
+        "reliability": doc["epochs"][0]["val_reliability"],
+    }
+    valid_training_run_record.write_text(json.dumps(doc))
+    result = validate_training_run_record(valid_training_run_record)
+    assert result.ok, result.issues
+
+
 def test_training_metrics_csv_validates(valid_training_metrics_csv: Path) -> None:
     result = validate_training_metrics(valid_training_metrics_csv)
     assert result.ok, result.issues
