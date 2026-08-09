@@ -83,6 +83,66 @@ def test_iafdb_bank_with_out_of_range_activation_position_fails(valid_iafdb_bank
     assert any("activation_position" in i for i in result.issues), result.issues
 
 
+def test_iafdb_bank_accepts_uncalibrated(valid_iafdb_bank: Path) -> None:
+    """1.4: an uncalibrated bank can say so.
+
+    Before 1.4 `calibration_method` was a single-member enum, so the only value
+    that validated asserted a calibration step had run. A bank extracted without
+    R-wave anchoring therefore had to make a false claim about its own signal
+    processing in order to be writable at all — which is worse than a missing
+    value, and is why this jumped Phase 2 (CL-154 → CL-156).
+    """
+    with h5py.File(valid_iafdb_bank, "r+") as f:
+        f.attrs["calibration_method"] = "none"
+        del f.attrs["calibration_target_qrs_pp_mv"]
+        f.attrs["calibration_target_qrs_pp_mv"] = float("inf")
+    result = validate_iafdb_bank(valid_iafdb_bank)
+    assert result.ok, result.issues
+
+
+def test_iafdb_bank_target_stays_required_when_uncalibrated(valid_iafdb_bank: Path) -> None:
+    """The +inf sentinel is the contract, not a nullable field.
+
+    iafdb withdrew the ask to make `calibration_target_qrs_pp_mv` nullable
+    (CL-154): a sentinel in a field that is merely *unused* costs nothing, while
+    nullable would force every reader to handle a None it can never act on. So
+    the field stays required and strictly positive even in 'none' mode — and
+    dropping it must still fail.
+    """
+    with h5py.File(valid_iafdb_bank, "r+") as f:
+        f.attrs["calibration_method"] = "none"
+        del f.attrs["calibration_target_qrs_pp_mv"]
+    result = validate_iafdb_bank(valid_iafdb_bank)
+    assert not result
+    assert any("calibration_target_qrs_pp_mv" in i for i in result.issues), result.issues
+
+
+def test_iafdb_bank_rejects_an_unknown_calibration_method(valid_iafdb_bank: Path) -> None:
+    """Widening the enum by one value must not turn it into a free-form string —
+    a typo'd or invented method still has to fail."""
+    with h5py.File(valid_iafdb_bank, "r+") as f:
+        f.attrs["calibration_method"] = "r_wave"
+    result = validate_iafdb_bank(valid_iafdb_bank)
+    assert not result
+    assert any("calibration_method" in i or "is not one of" in i for i in result.issues), (
+        result.issues
+    )
+
+
+def test_iafdb_bank_still_accepts_the_previous_schema_version(valid_iafdb_bank: Path) -> None:
+    """Option (b): the version enum lists BOTH 1.3 and 1.4, so banks already on
+    disk keep validating while new ones are stamped 1.4.
+
+    The alternative (replacing 1.3 with 1.4) would have made every existing
+    bank invalid for an additive change, and an old pin meeting a 'none' bank
+    would fail with a confusing "not in enum" instead of a legible "needs 1.4".
+    """
+    with h5py.File(valid_iafdb_bank, "r+") as f:
+        f.attrs["schema_version"] = "1.3"
+    result = validate_iafdb_bank(valid_iafdb_bank)
+    assert result.ok, result.issues
+
+
 def test_iafdb_bank_with_run_record_path_validates(valid_iafdb_bank: Path) -> None:
     """The sidecar pointer is a plain relative string; absence is legal, and is
     covered by every other iafdb fixture since none of them set it."""
