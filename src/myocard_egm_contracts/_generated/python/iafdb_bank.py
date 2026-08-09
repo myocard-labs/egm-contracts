@@ -10,10 +10,11 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, RootModel
 
 class SchemaVersion(Enum):
     """
-    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions. 1.1 (from 1.0) added: 'none' to threshold_mode enum + nullable threshold_value, for the unfiltered-export path (every window, no healthy threshold). 1.2 (from 1.1) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage). 1.3 (from 1.2) added the optional `run_record_path` sidecar pointer + the optional per-trace `activation_position` (egm-contracts v0.6.0). Pre-1.0 of egm-contracts: enum-of-one pattern per project/schema_evolution.md (no in-the-wild back-compat needed yet); when v1.0 ships, this enum may grow to accept multiple supported versions.
+    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions. 1.1 (from 1.0) added: 'none' to threshold_mode enum + nullable threshold_value, for the unfiltered-export path (every window, no healthy threshold). 1.2 (from 1.1) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage). 1.3 (from 1.2) added the optional `run_record_path` sidecar pointer + the optional per-trace `activation_position` (egm-contracts v0.6.0). 1.4 (from 1.3) widened `calibration_method` to admit 'none'. ORDER IS LOAD-BEARING: schema_info.current_version() returns the LAST entry, so '1.4' must stay last or new banks would be stamped with the older version. Pre-1.0 of egm-contracts: the enum-of-one pattern per project/schema_evolution.md (no in-the-wild back-compat needed yet); when v1.0 ships, this enum may grow to accept multiple supported versions.
     """
 
     field_1_3 = "1.3"
+    field_1_4 = "1.4"
 
 
 class Source(Enum):
@@ -34,10 +35,11 @@ class FsHz(Enum):
 
 class CalibrationMethod(Enum):
     """
-    How per-record amplitude calibration was computed. R-wave anchoring is always applied regardless of threshold strategy. Phase 1 only supports this one method; future methods would add new enum values rather than replacing this one.
+    How per-record amplitude calibration was computed, or 'none' when no calibration was applied and the stored signal is in the source dataset's raw units. 'none' was added in 1.4 because a single-member enum left an uncalibrated bank with no legal value to write — the only value that validated asserted a calibration step had run when it had not, so the file itself would have carried a false claim about its own signal processing. That is the line: a field that would merely be unused can take a sentinel, a field that would be untrue cannot. Which method is appropriate is a scientific question settled per corpus rather than a schema default — R-wave anchoring scales EGM amplitude against a surface-ECG QRS reference, which is not standard intracardiac practice, so it is a selectable option and not the forced path. Future methods add enum values rather than replacing existing ones.
     """
 
     r_wave_anchoring = "r_wave_anchoring"
+    none = "none"
 
 
 class ThresholdMode(Enum):
@@ -131,7 +133,7 @@ class Traces(BaseModel):
 
 class IafdbBank(BaseModel):
     """
-    Calibrated + band-pass-filtered bipolar EGM segments extracted from PhysioNet IAFDB. Schema version 1.3. Symmetric with SyntheticBank: maps to an HDF5 file with bank-level root attrs plus a `traces/` group containing per-trace columns. No `label` column — labeling is downstream policy applied at ClassifierBank conversion time by a consumer-supplied label_fn. 1.2 (from 1.1) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage). 1.3 (from 1.2) added the optional `run_record_path` sidecar pointer and the optional per-trace `activation_position` (egm-contracts v0.6.0, Phase 1.5).
+    Calibrated + band-pass-filtered bipolar EGM segments extracted from PhysioNet IAFDB. Schema versions 1.3-1.4 (new banks are stamped 1.4). Symmetric with SyntheticBank: maps to an HDF5 file with bank-level root attrs plus a `traces/` group containing per-trace columns. No `label` column — labeling is downstream policy applied at ClassifierBank conversion time by a consumer-supplied label_fn. 1.2 (from 1.1) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage). 1.3 (from 1.2) added the optional `run_record_path` sidecar pointer and the optional per-trace `activation_position` (egm-contracts v0.6.0, Phase 1.5). 1.4 (from 1.3) widened `calibration_method` to admit 'none' so a bank that was not calibrated can say so instead of asserting a step that never ran (egm-contracts v0.6.1). Both versions are accepted on read.
     """
 
     model_config = ConfigDict(
@@ -139,7 +141,7 @@ class IafdbBank(BaseModel):
     )
     schema_version: SchemaVersion
     """
-    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions. 1.1 (from 1.0) added: 'none' to threshold_mode enum + nullable threshold_value, for the unfiltered-export path (every window, no healthy threshold). 1.2 (from 1.1) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage). 1.3 (from 1.2) added the optional `run_record_path` sidecar pointer + the optional per-trace `activation_position` (egm-contracts v0.6.0). Pre-1.0 of egm-contracts: enum-of-one pattern per project/schema_evolution.md (no in-the-wild back-compat needed yet); when v1.0 ships, this enum may grow to accept multiple supported versions.
+    Schema version in X.Y form. X (major) bumps at release; Y (minor) bumps on every dev-time structural change. Consumers MUST refuse unknown major versions. 1.1 (from 1.0) added: 'none' to threshold_mode enum + nullable threshold_value, for the unfiltered-export path (every window, no healthy threshold). 1.2 (from 1.1) added the optional `bank_id` stable-artifact identifier (egm-contracts v0.5.0, cross-artifact linkage). 1.3 (from 1.2) added the optional `run_record_path` sidecar pointer + the optional per-trace `activation_position` (egm-contracts v0.6.0). 1.4 (from 1.3) widened `calibration_method` to admit 'none'. ORDER IS LOAD-BEARING: schema_info.current_version() returns the LAST entry, so '1.4' must stay last or new banks would be stamped with the older version. Pre-1.0 of egm-contracts: the enum-of-one pattern per project/schema_evolution.md (no in-the-wild back-compat needed yet); when v1.0 ships, this enum may grow to accept multiple supported versions.
     """
     created_utc: AwareDatetime
     """
@@ -170,11 +172,11 @@ class IafdbBank(BaseModel):
     """
     calibration_method: CalibrationMethod
     """
-    How per-record amplitude calibration was computed. R-wave anchoring is always applied regardless of threshold strategy. Phase 1 only supports this one method; future methods would add new enum values rather than replacing this one.
+    How per-record amplitude calibration was computed, or 'none' when no calibration was applied and the stored signal is in the source dataset's raw units. 'none' was added in 1.4 because a single-member enum left an uncalibrated bank with no legal value to write — the only value that validated asserted a calibration step had run when it had not, so the file itself would have carried a false claim about its own signal processing. That is the line: a field that would merely be unused can take a sentinel, a field that would be untrue cannot. Which method is appropriate is a scientific question settled per corpus rather than a schema default — R-wave anchoring scales EGM amplitude against a surface-ECG QRS reference, which is not standard intracardiac practice, so it is a selectable option and not the forced path. Future methods add enum values rather than replacing existing ones.
     """
     calibration_target_qrs_pp_mv: float = Field(..., gt=0.0)
     """
-    Target peak-to-peak QRS amplitude in mV against which each record was calibrated.
+    Target peak-to-peak QRS amplitude in mV against which each record was calibrated. Stays REQUIRED and strictly positive even when calibration_method is 'none': producers write +inf, the same sentinel convention peak_to_peak_mv and hop_ms already use for not-applicable-in-this-mode. Deliberately not made nullable — a sentinel in a field that is merely unused costs nothing, while nullable would force every reader to handle a None it can never act on.
     """
     threshold_mode: ThresholdMode
     """
