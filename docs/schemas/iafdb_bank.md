@@ -12,8 +12,11 @@ The on-disk layout mirrors `synthetic_bank`: bank-level HDF5 root
 attrs carry provenance + extraction parameters; a `traces/` group
 holds per-trace columns aligned along a first dimension N.
 
-Schema version: `1.3` (plain X.Y string, matching all other schemas in
-this package). `1.3` added two optional fields — the `run_record_path`
+Schema versions: `1.3` and `1.4` — both accepted on read; new banks are
+stamped `1.4`. (Plain X.Y strings, matching all other schemas in this
+package.) `1.4` widened `calibration_method` to admit `"none"`, so a bank
+extracted without amplitude calibration can say so; see below for why that
+couldn't wait. `1.3` added two optional fields — the `run_record_path`
 sidecar pointer and the per-trace `activation_position` (egm-contracts
 v0.6.0); both are optional, so banks written before them stay valid.
 `1.2` added the optional `bank_id` stable-artifact
@@ -34,9 +37,27 @@ selected segments. A downstream consumer decides what label semantics
 attach to a given bank; that decision lives in the converter call when
 the bank is turned into a ClassifierBank, not in this schema.
 
-R-wave-anchored calibration produces calibrated millivolt amplitudes
-from raw ADC counts, and the configured threshold strategy (absolute
-or per-record percentile) selects segments that pass.
+R-wave anchoring — scaling EGM amplitude so a paired surface-ECG QRS hits
+a target peak-to-peak value — converts raw ADC counts into millivolts, and
+the configured threshold strategy (absolute or per-record percentile)
+selects the segments that pass.
+
+### Why `"none"` exists (1.4)
+
+Calibration used to be mandatory in the schema, not just in practice:
+`calibration_method` was an enum with exactly one member. That was fine
+while every bank was anchored, and became a problem the moment one wasn't
+— because the only value that validated **asserted that a calibration step
+had run**. A bank extracted without anchoring could not describe itself
+truthfully; it could only make a false claim or be unwritable.
+
+That distinction is why this shipped as a point release rather than
+waiting: this project sentinels fields that would merely be *unused*
+(`peak_to_peak_mv`, `hop_ms`), but a field that would be *untrue* gets
+fixed. The wider context is that surface-QRS-referenced scaling is not a
+standard intracardiac practice, so which method is right is a scientific
+question settled per corpus — `"none"` makes "we didn't calibrate" a
+statement the format can carry, rather than a gap.
 
 ## What gets stored
 
@@ -46,7 +67,12 @@ Bank-level root attrs (HDF5):
 - `bank_id` — optional stable artifact id (since 1.2); pattern defined once in `common.schema.json`. Absent on legacy banks.
 - `run_record_path` — optional relative path to a sibling JSON run record of per-record extraction diagnostics (since 1.3), e.g. `iafdb_healthy_v1_run_record.json`. Same sibling convention as `noise_bank` ↔ `noise_bank_run_record`. Absence means "no sidecar", not an error. The record's own schema isn't formalized yet, so this is a path rather than an embedded object.
 - `fs_hz` (1000.0), `trace_duration_ms`, `window_ms`, `window_samples`, `hop_ms`
-- `calibration_method` (= "r_wave_anchoring"), `calibration_target_qrs_pp_mv`
+- `calibration_method` — `"r_wave_anchoring"` or `"none"` (since 1.4).
+  `"none"` means no amplitude calibration was applied and the stored signal is
+  in the source dataset's raw units.
+- `calibration_target_qrs_pp_mv` — the target amplitude calibrated against.
+  **Required and strictly positive even when `calibration_method` is
+  `"none"`**, where producers write `+inf`
 - `threshold_mode` ("absolute" | "percentile" | "none" since 1.1), `threshold_value` (nullable since 1.1, when `threshold_mode = "none"`)
 - `band_hz` (two-element [low, high] in Hz)
 - `source_records` (vlen-UTF-8 string array; contributing IAFDB records)
@@ -81,7 +107,13 @@ No `label` column — labeling happens at ClassifierBank conversion time.
 
 The iafdb-pipeline producer is responsible for:
 
-- Calibrating raw ADC counts to mV via R-wave anchoring.
+- Choosing a calibration method and recording it honestly. R-wave anchoring
+  converts raw ADC counts to mV; `"none"` (since 1.4) leaves the signal in
+  the source dataset's raw units. In `"none"` mode the producer still writes
+  `calibration_target_qrs_pp_mv`, as `+inf` — the same
+  not-applicable-in-this-mode sentinel `peak_to_peak_mv` and `hop_ms` use.
+  Downstream amplitude comparisons across banks are only meaningful between
+  banks that share a method.
 - Band-passing the calibrated signal at the recorded `band_hz`.
 - Segmenting calibrated traces by sliding window.
 - Applying the threshold strategy to select segments. As of `1.1`,

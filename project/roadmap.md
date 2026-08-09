@@ -109,6 +109,28 @@ unaffected.
 > all-files codegen churn in the middle of a coordinated schema migration would obscure the
 > schema diff it's meant to verify. Schedule when no bump is in flight.
 
+### `LabelNames` generates a constrained dict key, which some mypy setups reject
+
+`LabelNames` uses `patternProperties: {"^[0-9]+$": …}` to require stringified-integer keys, and
+datamodel-code-generator renders that as `dict[constr(pattern=r"^[0-9]+$"), str]` — a runtime
+function call in a type position. Pydantic is happy; mypy calls it *"Cannot use a function call in
+a type annotation"* when it analyses the file. It is the only such construct in the generated code
+(`git grep 'constr(' v0.5.3 -- _generated/` is empty; v0.6.0 introduced it).
+
+**Not currently a problem, and not worth pre-emptive surgery.** CI is green, local runs are green,
+and the one time it surfaced (2026-08-09) the cause was a corrupted virtualenv, not the code. But
+this package ships `py.typed`, so a downstream repo that type-checks *through* our models could
+hit it.
+
+Switching to `propertyNames` does **not** help — verified 2026-08-09, dcg emits identical output,
+because with `--field-constraints` it has nowhere to put a *key* constraint except the key type.
+The real options are: drop the pattern to `additionalProperties: {"type": "string"}` (yielding a
+clean `dict[str, str]`) and move the numeric-key check into `validators/synthetic_bank.py` beside
+the cross-group FK check; or leave it and let a downstream consumer's mypy config deal with it.
+
+> **Trigger:** the first time a downstream repo's type-check trips over it. Until then the schema-level
+> key guarantee is worth more than the theoretical friction.
+
 ### Noise bank ↔ run record: how should the two files reference each other?
 
 `bank_id` now exists in **both** `noise_bank` (1.1, v0.6.0) and its sibling

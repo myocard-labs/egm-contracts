@@ -56,12 +56,50 @@ One **inbound** dependency is worth naming even though it isn't mine to track: e
 reader, the four producer/consumer migrations, and everything in Waves 2–3 that touches a changed type
 are all gated on the tag. That makes S12 (the pre-PR run) the wave's real bottleneck, not S1.
 
+## Post-release addendum — v0.6.1 (CL-156) — READY FOR PR
+
+> _Added 2026-08-09 after v0.6.0 shipped. A late Phase-1.5 schema change, approved do-it-now by
+> Daniel because deferring it would make every uncalibrated IAFDB bank **assert a calibration that
+> never ran** — the line iafdb drew in CL-154: sentinel a field that would be merely unused, fix a
+> field that would be untrue. Blast radius independently re-verified by the project-lead: **zero
+> consumer code changes**._
+
+**The change (CL-156):**
+
+1. ✅ **DONE (uncommitted):** `iafdb_bank.calibration_method.enum` → `["r_wave_anchoring", "none"]`,
+   `schema_version.enum` → `["1.3", "1.4"]`. **Order is load-bearing** — `current_version()` returns
+   `versions[-1]`, so `"1.4"` must stay last. Descriptions updated (why `none` exists; the `+inf`
+   sentinel for `calibration_target_qrs_pp_mv`, which stays **required + `exclusiveMinimum: 0`** —
+   iafdb withdrew the nullable ask). Verified: `supported_versions('iafdb_bank') == ('1.3','1.4')`,
+   `current_version() == '1.4'`.
+2. ✅ **Re-run codegen** (Daniel ran it locally — the sandbox mount still refuses unlink) — `CalibrationMethod` gains a member, `SchemaVersion` gains `"1.4"`. *(Blocked
+   in the last session: the sandbox lost unlink permission on the mount, and
+   datamodel-code-generator replaces its output files. Restarting the session clears it.)*
+3. ✅ **Tests:** `none` accepted · unknown method still rejected · a bank stamped `1.3` still
+   validates (both versions supported — the point of option (b)) · `+inf`
+   `calibration_target_qrs_pp_mv` validates · `current_version()` returns `1.4`.
+4. ✅ **Docs:** `docs/schemas/iafdb_bank.md` (1.4 + the `none` semantics) · `schema_evolution.md`
+   `iafdb_bank` 1.4 entry · `CHANGELOG.md` new `[0.6.1]` section.
+5. ✅ **Version:** `pyproject.toml` 0.6.0 → **0.6.1** (additive enum widening; precedent = v0.5.3's
+   pattern relaxation was a patch).
+6. ✅ **Also fold in CL-099:** *(verified both directions with `git check-ignore`)* root-anchor `.gitignore` `data/` → `/data/` (+ any other
+   output-dir patterns this repo carries). Verify **both** directions with `git check-ignore`: a
+   same-named source package is no longer ignored, a top-level output dir still is. Latent here (no
+   `src/**/data/` yet) but it is the trap that red-CI'd egm-classifier.
+7. ☐ **Reply on CL-156** when tagged, and note the flow-down order: **contracts → egm-data (re-pin,
+   no code) → iafdb**. egm-data must be re-pinned and released *before* iafdb writes a `none` bank,
+   or the bank is unreadable by the library that wrote it.
+
+**No `skip-schema-bump` label needed this time** — `iafdb_bank` bumps its `schema_version`, and it is
+the only schema changing.
+
 ## Work remaining / open items
 
 | Item | Kind | Blocked on | Status |
 |---|---|---|---|
-| Open + merge the v0.6.0 PR **with the `skip-schema-bump` label**, then tag `v0.6.0` on `release` | handoff | Daniel (web UI) | open |
-| Notify the project-lead once tagged, so the linkage doc's Proposed-changes P1–P6 fold into the canonical sections | handoff | — | open |
+| ~~Open + merge the v0.6.0 PR, tag `v0.6.0`~~ | handoff | — | **done** 2026-07-30 (commit `9595f09`; development fast-forwarded, branches + tag on one commit) |
+| ~~Notify the project-lead + adopters that the tag is live~~ | handoff | — | **done** 2026-07-31 (CL-089) |
+| Fold linkage Proposed-changes P1–P6 into the canonical §1–§3 | handoff | project-lead (CL-089) | open — **not this chat's to do** |
 | ~~S1–S12~~ | step | — | **all done** 2026-07-30 |
 | ~~Confirm the `oneOf` + `const` discriminator codegens cleanly~~ | open-question | — | **closed** (S7 probe: emits a proper Pydantic tagged union) |
 

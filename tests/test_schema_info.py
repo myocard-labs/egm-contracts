@@ -42,6 +42,19 @@ def test_current_version_is_the_last_supported() -> None:
     assert current_version("synthetic_bank") == versions[-1]
 
 
+def test_iafdb_bank_supports_two_versions_with_the_newest_last() -> None:
+    """`iafdb_bank` is the first schema to list more than one accepted version,
+    and the ORDER is load-bearing, not cosmetic.
+
+    Both writers stamp `current_version()`, which returns `versions[-1]`. So
+    listing 1.4 last is what makes new banks 1.4 with no writer change at all
+    — and sorting this enum "tidily" the other way would silently start
+    stamping banks with the older version while every test still passed.
+    """
+    assert supported_versions("iafdb_bank") == ("1.3", "1.4")
+    assert current_version("iafdb_bank") == "1.4"
+
+
 def test_training_metrics_has_no_schema_version() -> None:
     """training_metrics.schema.json describes one row of a CSV, not a
     versioned document; it has no schema_version field. supported_versions
