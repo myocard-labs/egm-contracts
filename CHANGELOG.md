@@ -11,6 +11,37 @@ changed per release and names the affected `schema_version`s. Entries are per-ve
 `v0.5.0` on; the beta that built the seven-schema baseline (`v0.1.0`–`v0.4.1`) is summarized
 under [Earlier versions](#earlier-versions).
 
+## [0.6.1] — 2026-08-09
+
+A single-schema follow-up to the Phase-1.5 Wave-1 bump, pulled forward from Phase 2 because
+deferring it would have made every uncalibrated IAFDB bank assert a calibration that never ran.
+
+### Changed
+
+- **`iafdb_bank` 1.4 — `calibration_method` admits `"none"`.** The enum had exactly one member,
+  so a bank extracted without R-wave anchoring had no legal value to write: the only value that
+  validated claimed a calibration step had run. `"none"` lets such a bank describe itself
+  truthfully (CL-154 → CL-156). Additive — existing banks validate unchanged.
+
+  `calibration_target_qrs_pp_mv` deliberately stays **required and strictly positive**; producers
+  write `+inf` in `none` mode, matching the sentinel convention `peak_to_peak_mv` and `hop_ms`
+  already use. The distinction this release draws: sentinel a field that would merely be *unused*,
+  fix a field that would be *untrue*.
+
+  The `schema_version` enum becomes `["1.3", "1.4"]` — **both accepted**, newest last. Both writers
+  stamp `current_version()`, which returns the last entry, so new banks are 1.4 with no writer
+  change while 1.3 banks stay valid. **Re-ordering that enum would silently stamp the older
+  version.**
+
+  **Re-pin cascade:** egm-data (re-pin only, no source change) must ship before iafdb-pipeline
+  writes a `none` bank.
+
+### Fixed
+
+- Root-anchored the `.gitignore` output-dir patterns (`data/` → `/data/`, and friends), so a
+  same-named source package under `src/` can no longer be silently untracked — the trap that
+  red-CI'd a sibling repo at Refactor Step 8 (CL-099).
+
 ## [0.6.0] — 2026-07-30
 
 Phase-1.5 Wave 1 — the coordinated schema bump the whole constellation re-pins to. Seven schema

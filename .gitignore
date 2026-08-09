@@ -70,14 +70,18 @@ coverage.xml
 *.ckpt
 *.safetensors
 
-data/
-banks/
-checkpoints/
-runs/
-logs/
-mlruns/
-wandb/
-artifacts/
+# Root-anchored on purpose (leading slash): an unanchored `data/` matches at
+# ANY depth, so it would silently untrack a `src/<pkg>/data/` source package —
+# green locally, ModuleNotFoundError in CI. That exact trap red-CI'd a sibling
+# repo once already. Verify both directions with `git check-ignore -v <path>`.
+/data/
+/banks/
+/checkpoints/
+/runs/
+/logs/
+/mlruns/
+/wandb/
+/artifacts/
 
 # Allow tiny fixtures committed under tests/fixtures/ if needed:
 !tests/fixtures/**

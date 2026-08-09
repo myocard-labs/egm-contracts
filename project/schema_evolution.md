@@ -401,6 +401,32 @@ introduction version.
 
 ### iafdb_bank
 
+- **1.4** — egm-contracts v0.6.1. `calibration_method` widened from
+  `["r_wave_anchoring"]` to `["r_wave_anchoring", "none"]` (CL-156). Additive:
+  existing banks validate unchanged.
+  - **Why it couldn't wait for Phase 2.** The single-member enum left an
+    uncalibrated bank with no legal value to write — the only value that
+    validated asserted a calibration step had run when it had not, so the file
+    would have carried a false claim about its own signal processing. The line
+    this draws is worth remembering: **sentinel a field that would merely be
+    unused; fix a field that would be untrue.** The two preceding cases
+    (`peak_to_peak_mv`, `hop_ms`) took sentinels because they were only unused.
+  - **`calibration_target_qrs_pp_mv` stays required + `exclusiveMinimum: 0`.**
+    The nullable ask was withdrawn; producers write `+inf` in `none` mode. A
+    sentinel in an unused field costs nothing, while nullable would force every
+    reader to handle a `None` it can never act on.
+  - **The version enum now lists TWO versions — `["1.3", "1.4"]` — and the
+    order is load-bearing.** `current_version()` returns `versions[-1]`, and
+    both writers (egm-data `writers.py`, iafdb `bank_export.py`) stamp
+    `current_version()`, so new banks become 1.4 with **no writer change**,
+    while 1.3 banks stay valid. Re-sorting this enum would silently start
+    stamping the older version. Chosen over replacing 1.3 outright because an
+    old pin meeting a `none` bank then fails with a legible "needs 1.4" rather
+    than a confusing "none not in enum".
+  - **Flow-down:** contracts → egm-data (re-pin only, zero source change) →
+    iafdb. egm-data must be released **before** iafdb writes a `none` bank, or
+    the bank is unreadable by the library that wrote it.
+
 - **1.3** — egm-contracts v0.6.0. Two optional additions, both Phase-1.5 Wave 1:
   - `run_record_path` root attr (B11) — relative pointer to a sibling JSON
     run record of per-record extraction diagnostics, mirroring the
